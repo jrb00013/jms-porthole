@@ -3,7 +3,7 @@ import ipaddress
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from rich.console import Console
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 console = Console()
 
@@ -12,7 +12,16 @@ COMMON_PORTS = {
     80: "HTTP", 110: "POP3", 143: "IMAP", 443: "HTTPS", 445: "SMB",
     3306: "MySQL", 3389: "RDP", 5432: "PostgreSQL", 5900: "VNC",
     5901: "VNC-1", 6379: "Redis", 8080: "HTTP-Alt", 8443: "HTTPS-Alt",
-    27017: "MongoDB",
+    27017: "MongoDB", 8888: "Jupyter", 9200: "Elasticsearch", 5601: "Kibana",
+    2375: "Docker", 2376: "Docker-TLS", 9090: "Prometheus", 3000: "Grafana",
+}
+
+PORT_RANGE_PRESETS = {
+    "web":      [80, 443, 8080, 8443, 8888],
+    "db":       [3306, 5432, 27017, 6379, 9200],
+    "remote":   [22, 23, 3389, 5900, 5901],
+    "devops":   [2375, 2376, 9090, 3000, 5601, 9200],
+    "all":      list(range(1, 1025)),
 }
 
 
@@ -37,7 +46,7 @@ def grab_banner(host: str, port: int, timeout: float = 2.0) -> str:
 
 
 def ping_host(host: str, timeout: float = 1.0) -> bool:
-    return check_port(host, 22, timeout) or check_port(host, 80, timeout) or check_port(host, 443, timeout)
+    return any(check_port(host, p, timeout) for p in [22, 80, 443, 8080])
 
 
 def scan_ports(host: str, ports: list[int] = None, threads: int = 100) -> dict[int, str]:
@@ -65,7 +74,13 @@ def scan_network(cidr: str, threads: int = 50) -> list[str]:
     hosts = [str(ip) for ip in network.hosts()]
     live = []
 
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        transient=True,
+    ) as progress:
         task = progress.add_task(f"Scanning {cidr} ({len(hosts)} hosts)...", total=len(hosts))
         with ThreadPoolExecutor(max_workers=threads) as ex:
             futures = {ex.submit(ping_host, h): h for h in hosts}
@@ -75,6 +90,10 @@ def scan_network(cidr: str, threads: int = 50) -> list[str]:
                     live.append(futures[future])
 
     return sorted(live)
+
+
+def resolve_port_preset(preset: str) -> list[int]:
+    return PORT_RANGE_PRESETS.get(preset, [])
 
 
 def print_scan_results(host: str, open_ports: dict[int, str]):
