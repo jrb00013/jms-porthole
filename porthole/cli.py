@@ -493,3 +493,26 @@ def diff(host, path_a, path_b, username, password, local_path):
         console.print("[red]Provide PATH_B or --local LOCAL_PATH[/red]")
         sys.exit(1)
 
+# ── SECRETS ───────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--paths", default=None, help="Comma-separated paths to scan")
+@click.option("--ext", default=None, help="File extensions filter (e.g. conf,env,yml)")
+@click.option("-o", "--output", default=None, help="Save findings as JSON")
+def secrets(host, username, password, paths, ext, output):
+    """Scan HOST for exposed secrets, API keys, and credentials."""
+    from .secrets import scan_remote, print_secret_results
+    from .report import to_json
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+
+    path_list = [p.strip() for p in paths.split(",")] if paths else None
+    console.print(f"[cyan]Scanning [bold]{host}[/bold] for secrets...[/cyan]")
+    findings = scan_remote(host, username, password, paths=path_list, extensions=ext)
+    print_secret_results(host, findings)
+    if output:
+        to_json(findings, output)
