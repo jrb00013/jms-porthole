@@ -49,6 +49,17 @@ pip install .
 | `jms knock HOST PORTS...` | Send port knock sequence |
 | `jms netmap CIDR` | Network map with reverse DNS |
 | `jms traceroute HOST` | Traceroute to host |
+| `jms health HOST CHECKS...` | HTTP/TCP health checks with latency |
+| `jms diff HOST PATH [PATH2]` | Compare local vs remote or two remote files |
+| `jms secrets HOST` | Scan for exposed API keys and credentials |
+| `jms vuln HOST` | Security posture checks (SSH, packages, SUID) |
+| `jms cert HOST` | TLS certificate expiry check |
+| `jms keydeploy HOST` | Deploy SSH public key to authorized_keys |
+| `jms backup HOST PATH` | Tarball and download a remote directory |
+| `jms procs services/ps/restart/kill` | Remote service and process management |
+| `jms dns lookup/enum/reverse` | DNS record lookup and subdomain enum |
+| `jms alert HOST CHECKS...` | Health monitoring with webhook alerts |
+| `jms logsearch HOST PATTERN` | Search remote journal and log files |
 | `jms hosts add/list/remove` | Manage saved host aliases |
 
 ---
@@ -95,6 +106,25 @@ jms knock 192.168.30.13 7000 8000 9000
 # Save a host alias
 jms hosts add heimdall 192.168.30.73 -u heimdall -p ubuntu
 jms broadcast heimdall
+
+# Health check + cert expiry
+jms health 192.168.30.13 tcp:22 https:443/
+jms cert example.com --ports 443,8443
+
+# Security scanning
+jms secrets 192.168.30.13 -u admin --paths /etc,/home
+jms vuln 192.168.30.13 -u admin
+
+# Deploy SSH key and backup remote config
+jms keydeploy 192.168.30.13 --key ~/.ssh/id_ed25519.pub
+jms backup 192.168.30.13 /etc/nginx -o nginx-backup.tar.gz
+
+# DNS enum and log search
+jms dns enum example.com
+jms logsearch 192.168.30.13 "error" --since "2 hours ago"
+
+# Alert on service failure
+jms alert 192.168.30.13 tcp:80 http:443/ --webhook https://hooks.example.com/alerts --interval 30
 ```
 
 ---
