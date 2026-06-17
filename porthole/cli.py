@@ -438,3 +438,58 @@ def hosts_remove(alias):
     """Remove a saved host alias."""
     from .config import delete_host
     delete_host(alias)
+# ── HEALTH ────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.argument("checks", nargs=-1, required=True)
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def health(host, checks, output):
+    """Run HTTP/TCP health checks on HOST.
+
+    Check specs: tcp:22  http:80/  https:443/api
+    """
+    from .health import run_health_checks, print_health_results
+    from .health import parse_check_specs
+    from .report import to_json
+
+    check_list = parse_check_specs(checks)
+    if not check_list:
+        console.print("[red]No valid checks specified. Use tcp:PORT or http:PORT/path[/red]")
+        sys.exit(1)
+
+    console.print(f"[cyan]Running {len(check_list)} health check(s) on [bold]{host}[/bold]...[/cyan]")
+    results = run_health_checks(host, check_list)
+    print_health_results(host, results)
+    if output:
+        to_json(results, output)
+
+
+# ── DIFF ──────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.argument("path_a")
+@click.argument("path_b", required=False)
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--local", "local_path", default=None, help="Compare LOCAL file against remote PATH_A")
+def diff(host, path_a, path_b, username, password, local_path):
+    """Compare files on HOST or local vs remote.
+
+    Remote vs remote: jms diff HOST /etc/a.conf /etc/b.conf
+    Local vs remote:  jms diff HOST /etc/app.conf --local ./app.conf
+    """
+    from .diff import diff_local_remote, diff_remote_remote
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+
+    if local_path:
+        diff_local_remote(host, username, password, local_path, path_a)
+    elif path_b:
+        diff_remote_remote(host, username, password, path_a, path_b)
+    else:
+        console.print("[red]Provide PATH_B or --local LOCAL_PATH[/red]")
+        sys.exit(1)
+
