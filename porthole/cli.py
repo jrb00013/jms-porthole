@@ -555,3 +555,26 @@ def cert(host, ports, output):
     print_cert_results(host, results)
     if output:
         to_json(results, output)
+
+# ── KEYDEPLOY ─────────────────────────────────────────────────────────────────
+
+@main.command(name="keydeploy")
+@click.argument("host")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--key", "key_path", default="~/.ssh/id_rsa.pub", show_default=True)
+@click.option("--comment", default=None, help="Comment tag for the deployed key")
+@click.option("--list", "list_keys", is_flag=True, help="List remote authorized keys")
+def keydeploy(host, username, password, key_path, comment, list_keys):
+    """Deploy an SSH public key to HOST authorized_keys."""
+    from .keydeploy import deploy_key, list_remote_keys, print_remote_keys
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+
+    if list_keys:
+        keys = list_remote_keys(host, username, password)
+        print_remote_keys(host, keys)
+        return
+
+    deploy_key(host, username, password, key_path, comment)
