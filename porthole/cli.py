@@ -122,11 +122,17 @@ def sysinfo(host, username, password, output):
 @main.command()
 @click.argument("target", metavar="HOST_OR_CIDR")
 @click.option("--ports", default=None, help="Comma-separated ports (default: common)")
+@click.option("--preset", default=None, type=click.Choice(["web", "db", "remote", "devops", "all"]),
+              help="Port preset shortcut")
 @click.option("--threads", default=100, show_default=True)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-def scan(target, ports, threads, output):
-    """Scan a host or CIDR network for open ports / live hosts."""
+def scan(target, ports, preset, threads, output):
+    """Scan a host or CIDR network for open ports / live hosts.
+
+    Port presets: --preset web|db|remote|devops|all
+    """
     from .scanner import scan_ports, scan_network, print_scan_results, print_network_results, COMMON_PORTS
+    from .scan_cli_extras import resolve_port_preset
     from .report import to_json
 
     if "/" in target:
@@ -136,7 +142,12 @@ def scan(target, ports, threads, output):
         if output:
             to_json(live, output)
     else:
-        port_list = [int(p) for p in ports.split(",")] if ports else list(COMMON_PORTS.keys())
+        if preset:
+            port_list = resolve_port_preset(preset)
+        elif ports:
+            port_list = [int(p) for p in ports.split(",")]
+        else:
+            port_list = list(COMMON_PORTS.keys())
         console.print(f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]")
         results = scan_ports(target, port_list, threads)
         print_scan_results(target, results)
