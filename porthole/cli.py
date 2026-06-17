@@ -725,3 +725,64 @@ def dns_reverse(ip):
         console.print(f"[green]{ip}[/green] → [bold]{hostname}[/bold]")
     else:
         console.print(f"[dim]No PTR record for {ip}[/dim]")
+
+# ── ALERT ─────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.argument("checks", nargs=-1, required=True)
+@click.option("--interval", default=60, show_default=True, help="Check interval in seconds")
+@click.option("--webhook", default=None, help="Webhook URL for failure alerts")
+@click.option("--slack", is_flag=True, help="Send Slack-formatted webhook payload")
+@click.option("--once", is_flag=True, help="Run once and exit (no loop)")
+def alert(host, checks, interval, webhook, slack, once):
+    """Monitor HOST health checks and alert on failure.
+
+    Check specs: tcp:22  http:80/  https:443/api
+    """
+    from .alert import run_alert_loop
+    from .health import parse_check_specs
+
+    check_list = parse_check_specs(checks)
+    if not check_list:
+        console.print("[red]No valid checks specified.[/red]")
+        sys.exit(1)
+
+    max_iter = 1 if once else None
+    run_alert_loop(host, check_list, interval=interval, webhook=webhook,
+                   slack=slack, max_iterations=max_iter)
+
+
+# ── LOGSEARCH ─────────────────────────────────────────────────────────────────
+
+@main.command(name="logsearch")
+@click.argument("host")
+@click.argument("pattern")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--since", default="1 hour ago", show_default=True, help="Journal time window")
+@click.option("--paths", default=None, help="Comma-separated log directories")
+@click.option("--journal-only", is_flag=True, help="Search journalctl only")
+@click.option("--files-only", is_flag=True, help="Search log files only")
+@click.option("-n", "--limit", default=100, show_default=True)
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def logsearch(host, pattern, username, password, since, paths, journal_only, files_only, limit, output):
+    """Search remote logs on HOST for PATTERN."""
+    from .logsearch import search_journal, search_files, search_all, print_search_results
+    from .report import to_json
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+
+    path_list = [p.strip() for p in paths.split(",")] if paths else None
+
+    if journal_only:
+        results = search_journal(host, username, password, pattern, since=since, limit=limit)
+    elif files_only:
+        results = search_files(host, username, password, pattern, paths=path_list, limit=limit)
+    else:
+        results = search_all(host, username, password, pattern, since=since, paths=path_list, limit=limit)
+
+    print_search_results(host, pattern, results)
+    if output:
+        to_json(results, output)
