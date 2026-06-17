@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.backends.legacy:build"
 
 [project]
-name = "porthole"
+name = "jms-porthole"
 version = "0.1.0"
-description = "Remote monitoring, broadcasting, and recon toolkit"
+description = "JMS (Janus Monitoring Suite) — remote monitoring, broadcasting, and recon toolkit"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 porthole = "porthole.cli:main"
+jms = "porthole.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

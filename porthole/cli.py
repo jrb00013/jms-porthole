@@ -6,13 +6,13 @@ from rich.panel import Panel
 console = Console()
 
 BANNER = """[bold cyan]
- ██████╗  ██████╗ ██████╗ ████████╗██╗  ██╗ ██████╗ ██╗     ███████╗
- ██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██║  ██║██╔═══██╗██║     ██╔════╝
- ██████╔╝██║   ██║██████╔╝   ██║   ███████║██║   ██║██║     █████╗
- ██╔═══╝ ██║   ██║██╔══██╗   ██║   ██╔══██║██║   ██║██║     ██╔══╝
- ██║     ╚██████╔╝██║  ██║   ██║   ██║  ██║╚██████╔╝███████╗███████╗
- ╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝
-[/bold cyan][dim]  remote monitoring & recon toolkit[/dim]
+     ██╗███╗   ███╗███████╗    ██████╗  ██████╗ ██████╗ ████████╗██╗  ██╗ ██████╗ ██╗     ███████╗
+     ██║████╗ ████║██╔════╝    ██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██║  ██║██╔═══██╗██║     ██╔════╝
+     ██║██╔████╔██║███████╗    ██████╔╝██║   ██║██████╔╝   ██║   ███████║██║   ██║██║     █████╗
+██   ██║██║╚██╔╝██║╚════██║    ██╔═══╝ ██║   ██║██╔══██╗   ██║   ██╔══██║██║   ██║██║     ██╔══╝
+╚█████╔╝██║ ╚═╝ ██║███████║    ██║     ╚██████╔╝██║  ██║   ██║   ██║  ██║╚██████╔╝███████╗███████╗
+ ╚════╝ ╚═╝     ╚═╝╚══════╝    ╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝
+[/bold cyan][dim]  Janus Monitoring Suite — remote monitoring, broadcasting & recon[/dim]
 """
 
 
@@ -25,9 +25,9 @@ def get_credentials(username, password):
 
 
 @click.group()
-@click.version_option("0.1.0", prog_name="porthole")
+@click.version_option("0.1.0", prog_name="jms")
 def main():
-    """porthole — remote monitoring & recon toolkit"""
+    """JMS Porthole — Janus Monitoring Suite. Remote monitoring, broadcasting & recon toolkit."""
     pass
 
 
