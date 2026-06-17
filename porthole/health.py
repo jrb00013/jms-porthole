@@ -82,3 +82,31 @@ def print_health_results(host: str, results: list[dict]):
         table.add_row(r["name"], status_str, latency, detail)
 
     console.print(table)
+def parse_check_specs(specs: tuple[str, ...]) -> list[dict]:
+    """Parse check specs like 'tcp:22', 'http:80/', 'https:443/api'."""
+    checks = []
+    for spec in specs:
+        parts = spec.split(":", 2)
+        if len(parts) < 2:
+            continue
+        ctype = parts[0].lower()
+        rest = parts[1]
+
+        if ctype in ("https", "http"):
+            port_path = rest.split("/", 1)
+            port = int(port_path[0])
+            path = "/" + port_path[1] if len(port_path) > 1 else "/"
+            checks.append({
+                "type": "http",
+                "port": port,
+                "path": path,
+                "https": ctype == "https",
+                "name": spec,
+            })
+        else:
+            checks.append({
+                "type": "tcp",
+                "port": int(rest),
+                "name": spec,
+            })
+    return checks
