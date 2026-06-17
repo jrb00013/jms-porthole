@@ -7,7 +7,16 @@ name = "jms-porthole"
 version = "0.1.0"
 description = "JMS (Janus Monitoring Suite) — remote monitoring, broadcasting, and recon toolkit"
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.9"
+keywords = ["ssh", "vnc", "monitoring", "recon", "network", "security"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: System :: Monitoring",
+    "Topic :: Security",
+]
 dependencies = [
     "paramiko>=3.0",
     "rich>=13.0",
