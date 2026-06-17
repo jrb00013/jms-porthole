@@ -578,3 +578,22 @@ def keydeploy(host, username, password, key_path, comment, list_keys):
         return
 
     deploy_key(host, username, password, key_path, comment)
+
+# ── BACKUP ────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.argument("remote_path")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("-o", "--output", default=None, help="Local output path (.tar.gz)")
+@click.option("--exclude", default=None, help="Comma-separated paths to exclude")
+def backup(host, remote_path, username, password, output, exclude):
+    """Backup a remote directory as a compressed tarball."""
+    from .backup import backup_remote
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+
+    exclude_list = [e.strip() for e in exclude.split(",")] if exclude else None
+    backup_remote(host, username, password, remote_path, output, exclude_list)
