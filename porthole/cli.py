@@ -24,6 +24,16 @@ def get_credentials(username, password):
     return username, password
 
 
+def resolve_host(alias_or_host: str, username, password):
+    """Resolve alias from config, fall back to raw host + prompted creds."""
+    from .config import resolve
+    resolved = resolve(alias_or_host)
+    if resolved:
+        host, u, p, _ = resolved
+        return host, u or username, p or password
+    return alias_or_host, username, password
+
+
 @click.group()
 @click.version_option("0.1.0", prog_name="jms")
 def main():
@@ -31,16 +41,19 @@ def main():
     pass
 
 
+# ── BROADCAST ────────────────────────────────────────────────────────────────
+
 @main.command()
 @click.argument("host")
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
 @click.option("--stop", is_flag=True, help="Stop the broadcast on remote host")
 def broadcast(host, username, password, stop):
     """Start (or stop) a VNC desktop broadcast from HOST."""
     from .broadcast import start_broadcast, stop_broadcast, print_connection_info
     import time
 
+    host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
 
     if stop:
@@ -63,152 +76,354 @@ def broadcast(host, username, password, stop):
         sys.exit(1)
 
 
+# ── MONITOR ───────────────────────────────────────────────────────────────────
+
 @main.command()
 @click.argument("host")
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
-@click.option("-i", "--interval", default=3, show_default=True, help="Refresh interval in seconds")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("-i", "--interval", default=3, show_default=True)
 def monitor(host, username, password, interval):
     """Live system monitor (CPU, RAM, disk, processes) on HOST."""
     from .monitor import run_monitor
+    host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     run_monitor(host, username, password, interval)
 
 
+# ── SYSINFO ───────────────────────────────────────────────────────────────────
+
 @main.command()
 @click.argument("host")
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
-def sysinfo(host, username, password):
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("-o", "--output", default=None, help="Save as JSON to this path")
+def sysinfo(host, username, password, output):
     """Dump full system info from HOST."""
     from .sysinfo import collect_sysinfo, print_sysinfo
+    from .report import to_json
+    from .ssh import SSHClient
+
+    host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
+
     console.print(f"[cyan]Collecting system info from [bold]{host}[/bold]...[/cyan]")
-    with __import__("porthole.ssh", fromlist=["SSHClient"]).SSHClient(host, username, password) as ssh:
+    with SSHClient(host, username, password) as ssh:
         info = collect_sysinfo(ssh)
+
     print_sysinfo(host, info)
 
+    if output:
+        to_json(info, output)
+
+
+# ── SCAN ──────────────────────────────────────────────────────────────────────
 
 @main.command()
 @click.argument("target", metavar="HOST_OR_CIDR")
-@click.option("--ports", default=None, help="Comma-separated ports to scan (default: common ports)")
-@click.option("--threads", default=100, show_default=True, help="Thread count")
-def scan(target, ports, threads):
+@click.option("--ports", default=None, help="Comma-separated ports (default: common)")
+@click.option("--threads", default=100, show_default=True)
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def scan(target, ports, threads, output):
     """Scan a host or CIDR network for open ports / live hosts."""
     from .scanner import scan_ports, scan_network, print_scan_results, print_network_results, COMMON_PORTS
+    from .report import to_json
 
     if "/" in target:
         console.print(f"[cyan]Scanning network [bold]{target}[/bold]...[/cyan]")
         live = scan_network(target, threads)
         print_network_results(target, live)
+        if output:
+            to_json(live, output)
     else:
         port_list = [int(p) for p in ports.split(",")] if ports else list(COMMON_PORTS.keys())
         console.print(f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]")
         results = scan_ports(target, port_list, threads)
         print_scan_results(target, results)
+        if output:
+            to_json([{"port": k, "info": v} for k, v in results.items()], output)
 
+
+# ── PROBE ─────────────────────────────────────────────────────────────────────
 
 @main.command()
 @click.argument("host")
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
+@click.option("--ports", default=None, help="Comma-separated ports to probe")
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def probe(host, ports, output):
+    """Deep service fingerprinting — banner grab, TLS info, version detection."""
+    from .probe import probe_host, print_probe_results
+    from .report import to_json
+
+    port_list = [int(p) for p in ports.split(",")] if ports else None
+    console.print(f"[cyan]Probing services on [bold]{host}[/bold]...[/cyan]")
+    results = probe_host(host, port_list)
+    print_probe_results(host, results)
+    if output:
+        to_json(results, output)
+
+
+# ── SHELL ─────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
 def shell(host, username, password):
     """Open an interactive SSH shell on HOST."""
     from .shell import interactive_shell
+    host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     interactive_shell(host, username, password)
 
+
+# ── TUNNEL ────────────────────────────────────────────────────────────────────
 
 @main.command()
 @click.argument("host")
 @click.argument("local_port", type=int)
 @click.argument("remote_port", type=int)
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
-@click.option("--remote-host", default="localhost", show_default=True, help="Remote host to forward to")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--remote-host", default="localhost", show_default=True)
 def tunnel(host, local_port, remote_port, username, password, remote_host):
     """Forward LOCAL_PORT through HOST to REMOTE_HOST:REMOTE_PORT."""
     from .tunnel import open_tunnel
+    host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     open_tunnel(host, username, password, local_port, remote_host, remote_port)
 
 
+# ── WATCH / LOGS ──────────────────────────────────────────────────────────────
+
 @main.command()
 @click.argument("host")
 @click.argument("filepath")
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
-@click.option("-n", "--lines", default=50, show_default=True, help="Initial lines to show")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("-n", "--lines", default=50, show_default=True)
 def watch(host, filepath, username, password, lines):
     """Tail -f FILEPATH on HOST with live colorized output."""
     from .watcher import watch_file
+    host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     watch_file(host, username, password, filepath, lines)
 
 
 @main.command()
 @click.argument("host")
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
 @click.option("--service", default=None, help="Filter by systemd service name")
 def logs(host, username, password, service):
     """Watch live journalctl logs on HOST."""
     from .watcher import watch_logs
+    host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     watch_logs(host, username, password, service)
 
 
+# ── SCREENSHOT ────────────────────────────────────────────────────────────────
+
 @main.command()
 @click.argument("host")
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
-@click.option("-o", "--output", default=None, help="Output file path (default: ~/porthole_screenshot_*.png)")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("-o", "--output", default=None)
 def screenshot(host, username, password, output):
     """Capture a screenshot of HOST's desktop and download it."""
     from .screenshot import capture_screenshot
+    host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     capture_screenshot(host, username, password, output)
 
 
+# ── HARVEST ───────────────────────────────────────────────────────────────────
+
 @main.command()
-@click.argument("hosts", nargs=-1, required=True)
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
+@click.argument("hosts", nargs=-1)
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
 @click.option("-f", "--file", "hosts_file", default=None, help="File with one host per line")
-@click.option("--threads", default=10, show_default=True, help="Parallel thread count")
-def harvest(hosts, username, password, hosts_file, threads):
-    """Gather system info from multiple hosts in parallel.
-
-    Pass hosts as arguments or use -f with a file (one host per line).
-
-    Examples:\n
-      porthole harvest 10.0.0.1 10.0.0.2 -u admin\n
-      porthole harvest -f hosts.txt -u admin
-    """
+@click.option("--threads", default=10, show_default=True)
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def harvest(hosts, username, password, hosts_file, threads, output):
+    """Gather system info from multiple hosts in parallel."""
     from .harvest import harvest as do_harvest, print_harvest_results
+    from .report import to_json
 
     username, password = get_credentials(username, password)
-
     host_list = list(hosts)
     if hosts_file:
         with open(hosts_file) as f:
-            host_list += [line.strip() for line in f if line.strip() and not line.startswith("#")]
+            host_list += [l.strip() for l in f if l.strip() and not l.startswith("#")]
 
     if not host_list:
-        console.print("[red]No hosts provided[/red]")
+        console.print("[red]No hosts provided.[/red]")
         sys.exit(1)
 
     results = do_harvest(host_list, username, password, threads)
     print_harvest_results(results)
+    if output:
+        to_json(results, output)
+
+
+# ── EXEC ──────────────────────────────────────────────────────────────────────
+
+@main.command(name="exec")
+@click.argument("hosts", nargs=-1, required=True)
+@click.option("-c", "--command", required=True, help="Command to run")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def exec_cmd(hosts, command, username, password, output):
+    """Run COMMAND on multiple hosts in parallel. Use -c 'cmd'."""
+    from .shell import run_command_on_hosts
+    from .report import to_json
+    username, password = get_credentials(username, password)
+    run_command_on_hosts(list(hosts), username, password, command)
+
+
+# ── TRANSFER ──────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.argument("local_path")
+@click.argument("remote_path")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+def upload(host, local_path, remote_path, username, password):
+    """Upload LOCAL_PATH to HOST:REMOTE_PATH via SFTP."""
+    from .transfer import upload_file
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+    upload_file(host, username, password, local_path, remote_path)
 
 
 @main.command()
-@click.argument("hosts", nargs=-1, required=True)
-@click.argument("command")
-@click.option("-u", "--username", default=None, help="SSH username")
-@click.option("-p", "--password", default=None, help="SSH password")
-def exec(hosts, command, username, password):
-    """Run COMMAND on multiple hosts in parallel and show results."""
-    from .shell import run_command_on_hosts
+@click.argument("host")
+@click.argument("remote_path")
+@click.argument("local_path")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+def download(host, remote_path, local_path, username, password):
+    """Download HOST:REMOTE_PATH to LOCAL_PATH via SFTP."""
+    from .transfer import download_file
+    host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
-    run_command_on_hosts(list(hosts), username, password, command)
+    download_file(host, username, password, remote_path, local_path)
+
+
+@main.command(name="ls")
+@click.argument("host")
+@click.argument("path", default=".")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+def ls_remote(host, path, username, password):
+    """List files on HOST:PATH via SFTP."""
+    from .transfer import list_remote_dir
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+    list_remote_dir(host, username, password, path)
+
+
+# ── SPRAY ─────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("hosts", nargs=-1, required=True)
+@click.option("-u", "--usernames", required=True, help="Comma-separated usernames")
+@click.option("-p", "--passwords", required=True, help="Comma-separated passwords")
+@click.option("--port", default=22, show_default=True)
+@click.option("--threads", default=10, show_default=True)
+@click.option("-o", "--output", default=None, help="Save hits as JSON")
+def spray(hosts, usernames, passwords, port, threads, output):
+    """SSH credential spray across hosts. For authorized testing only."""
+    from .spray import spray_hosts, print_spray_results
+    from .report import to_json
+
+    u_list = [u.strip() for u in usernames.split(",")]
+    p_list = [p.strip() for p in passwords.split(",")]
+
+    console.print(f"[yellow]⚠ For authorized use only[/yellow]")
+    results = spray_hosts(list(hosts), u_list, p_list, port, threads)
+    print_spray_results(results)
+    if output:
+        to_json([r for r in results if r["success"]], output)
+
+
+# ── KNOCK ─────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.argument("ports", nargs=-1, required=True, type=int)
+@click.option("--proto", type=click.Choice(["tcp", "udp"]), default="tcp", show_default=True)
+@click.option("--delay", default=0.1, show_default=True, help="Delay between knocks (seconds)")
+def knock(host, ports, proto, delay):
+    """Send a port knock sequence to HOST."""
+    from .portknock import knock as do_knock
+    do_knock(host, list(ports), proto, delay)
+
+
+# ── NETMAP ────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("cidr")
+@click.option("--no-dns", is_flag=True, help="Skip reverse DNS lookups")
+@click.option("--threads", default=50, show_default=True)
+@click.option("-o", "--output", default=None)
+def netmap(cidr, no_dns, threads, output):
+    """Network map — ICMP/TCP ping sweep with reverse DNS."""
+    from .netmap import map_network, print_map_results
+    from .report import to_json
+
+    console.print(f"[cyan]Mapping [bold]{cidr}[/bold]...[/cyan]")
+    results = map_network(cidr, resolve_dns=not no_dns, threads=threads)
+    print_map_results(cidr, results)
+    if output:
+        to_json(results, output)
+
+
+@main.command()
+@click.argument("host")
+@click.option("--max-hops", default=20, show_default=True)
+def traceroute(host, max_hops):
+    """Traceroute to HOST showing each hop."""
+    from .netmap import traceroute as do_trace, print_traceroute
+    console.print(f"[cyan]Tracing route to [bold]{host}[/bold]...[/cyan]")
+    hops = do_trace(host, max_hops)
+    print_traceroute(host, hops)
+
+
+# ── HOST ALIAS MANAGEMENT ─────────────────────────────────────────────────────
+
+@main.group()
+def hosts():
+    """Manage saved host aliases."""
+    pass
+
+
+@hosts.command(name="add")
+@click.argument("alias")
+@click.argument("host")
+@click.option("-u", "--username", required=True)
+@click.option("-p", "--password", default="")
+@click.option("--port", default=22, show_default=True)
+def hosts_add(alias, host, username, password, port):
+    """Save a host alias: jms hosts add prod 192.168.1.10 -u admin"""
+    from .config import save_host
+    save_host(alias, host, username, password, port)
+
+
+@hosts.command(name="list")
+def hosts_list():
+    """List saved host aliases."""
+    from .config import list_hosts
+    list_hosts()
+
+
+@hosts.command(name="remove")
+@click.argument("alias")
+def hosts_remove(alias):
+    """Remove a saved host alias."""
+    from .config import delete_host
+    delete_host(alias)
