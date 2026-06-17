@@ -7,10 +7,7 @@ console = Console()
 
 
 def start_broadcast(host: str, username: str, password: str) -> dict:
-    """
-    SSH into host, start x11vnc on the active X display, return connection info.
-    Returns dict with host, port, display.
-    """
+    """SSH into host, start x11vnc on the active X display, return connection info."""
     with SSHClient(host, username, password) as ssh:
         # Install x11vnc if missing
         out = ssh.run_out("command -v x11vnc")
@@ -22,14 +19,14 @@ def start_broadcast(host: str, username: str, password: str) -> dict:
         # Kill any existing instance
         ssh.run("pkill -x x11vnc 2>/dev/null; sleep 1; true")
 
-        # Detect display (X11 socket name)
-        display_socket = ssh.run_out("ls /tmp/.X11-unix/ | head -1")
+        # Detect display (X11 socket name, e.g. X1 → :1)
+        display_socket = ssh.run_out("ls /tmp/.X11-unix/ 2>/dev/null | head -1")
         display = ":" + display_socket.lstrip("X") if display_socket else ":0"
 
         # Find Xauthority
         xauth = ssh.run_out("ls /run/user/*/gdm/Xauthority 2>/dev/null | head -1")
         if not xauth:
-            xauth = ssh.run_out("echo $HOME/.Xauthority")
+            xauth = "$HOME/.Xauthority"
 
         # Wake the display
         ssh.run(f"DISPLAY={display} XAUTHORITY={xauth} xset dpms force on 2>/dev/null; true")
@@ -61,7 +58,21 @@ def start_broadcast(host: str, username: str, password: str) -> dict:
 def stop_broadcast(host: str, username: str, password: str):
     with SSHClient(host, username, password) as ssh:
         ssh.run("pkill -x x11vnc")
-        console.print("[green]x11vnc stopped.[/green]")
+    console.print("[green]x11vnc stopped.[/green]")
+
+
+def get_broadcast_status(host: str, username: str, password: str) -> dict:
+    """Check if a broadcast is currently running on the host."""
+    with SSHClient(host, username, password) as ssh:
+        pid = ssh.run_out("pgrep -x x11vnc")
+        port_out = ssh.run_out(
+            "ss -tlnp 2>/dev/null | grep x11vnc | grep -oP ':\\K\\d+' | head -1"
+        ) if pid else ""
+        return {
+            "running": bool(pid),
+            "pid": pid,
+            "port": int(port_out) if port_out.isdigit() else None,
+        }
 
 
 def print_connection_info(info: dict):
@@ -72,7 +83,7 @@ def print_connection_info(info: dict):
         f"[bold cyan]Display:[/bold cyan] {info['display']}\n\n"
         f"[bold green]Connect:[/bold green]\n"
         f"  vncviewer {host}:{port}\n\n"
-        f"[bold green]SSH tunnel:[/bold green]\n"
+        f"[bold green]SSH tunnel (secure):[/bold green]\n"
         f"  ssh -L {port}:localhost:{port} <user>@{host}\n"
         f"  vncviewer localhost:{port}",
         title="[bold]🖥️  DESKTOP BROADCASTING[/bold]",
