@@ -537,3 +537,21 @@ def vuln(host, username, password, output):
     print_vuln_results(host, results)
     if output:
         to_json(results, output)
+
+# ── CERT ──────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.option("--ports", default="443", show_default=True, help="Comma-separated ports")
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def cert(host, ports, output):
+    """Check TLS certificate expiry on HOST."""
+    from .cert import check_certs, print_cert_results
+    from .report import to_json
+
+    port_list = [int(p) for p in ports.split(",")]
+    console.print(f"[cyan]Checking certificates on [bold]{host}[/bold]...[/cyan]")
+    results = check_certs(host, port_list)
+    print_cert_results(host, results)
+    if output:
+        to_json(results, output)
