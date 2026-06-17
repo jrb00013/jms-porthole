@@ -516,3 +516,24 @@ def secrets(host, username, password, paths, ext, output):
     print_secret_results(host, findings)
     if output:
         to_json(findings, output)
+
+# ── VULN ────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.argument("host")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def vuln(host, username, password, output):
+    """Run security posture checks on HOST."""
+    from .vuln import run_vuln_checks, print_vuln_results
+    from .report import to_json
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+
+    console.print(f"[cyan]Running security checks on [bold]{host}[/bold]...[/cyan]")
+    results = run_vuln_checks(host, username, password)
+    print_vuln_results(host, results)
+    if output:
+        to_json(results, output)
