@@ -597,3 +597,80 @@ def backup(host, remote_path, username, password, output, exclude):
 
     exclude_list = [e.strip() for e in exclude.split(",")] if exclude else None
     backup_remote(host, username, password, remote_path, output, exclude_list)
+
+# ── PROCS ─────────────────────────────────────────────────────────────────────
+
+@main.group()
+def procs():
+    """Remote process and service management."""
+    pass
+
+
+@procs.command(name="services")
+@click.argument("host")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--state", default=None, help="Filter by state (active, failed, inactive)")
+def procs_services(host, username, password, state):
+    """List systemd services on HOST."""
+    from .procs import list_services, print_services
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+    services = list_services(host, username, password, filter_state=state)
+    print_services(host, services)
+
+
+@procs.command(name="ps")
+@click.argument("host")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--sort", "sort_by", default="cpu", type=click.Choice(["cpu", "mem", "pid"]))
+@click.option("-n", "--limit", default=20, show_default=True)
+def procs_ps(host, username, password, sort_by, limit):
+    """List top processes on HOST."""
+    from .procs import list_processes, print_processes
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+    procs = list_processes(host, username, password, sort_by=sort_by, limit=limit)
+    print_processes(host, procs)
+
+
+@procs.command(name="restart")
+@click.argument("host")
+@click.argument("service")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+def procs_restart(host, service, username, password):
+    """Restart a systemd service on HOST."""
+    from .procs import service_action
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+    ok, msg = service_action(host, username, password, service, "restart")
+    if ok:
+        console.print(f"[green]Restarted {service} on {host}[/green]")
+    else:
+        console.print(f"[red]Failed to restart {service}:[/red] {msg}")
+        sys.exit(1)
+
+
+@procs.command(name="kill")
+@click.argument("host")
+@click.argument("pid", type=int)
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--signal", default="TERM", show_default=True)
+def procs_kill(host, pid, username, password, signal):
+    """Send a signal to PID on HOST."""
+    from .procs import kill_process
+
+    host, username, password = resolve_host(host, username, password)
+    username, password = get_credentials(username, password)
+    ok, msg = kill_process(host, username, password, pid, signal)
+    if ok:
+        console.print(f"[green]Sent {signal} to PID {pid} on {host}[/green]")
+    else:
+        console.print(f"[red]Failed:[/red] {msg}")
+        sys.exit(1)
