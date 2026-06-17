@@ -674,3 +674,54 @@ def procs_kill(host, pid, username, password, signal):
     else:
         console.print(f"[red]Failed:[/red] {msg}")
         sys.exit(1)
+
+# ── DNS ───────────────────────────────────────────────────────────────────────
+
+@main.group()
+def dns():
+    """DNS enumeration and record lookup."""
+    pass
+
+
+@dns.command(name="lookup")
+@click.argument("domain")
+@click.option("--type", "rtype", default=None, help="Record type (A,MX,TXT,NS,...) or omit for all")
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def dns_lookup(domain, rtype, output):
+    """Look up DNS records for DOMAIN."""
+    from .dns import lookup_records, print_dns_results
+    from .report import to_json
+
+    rtypes = [rtype.upper()] if rtype else None
+    records = lookup_records(domain, rtypes)
+    print_dns_results(domain, records)
+    if output:
+        to_json(records, output)
+
+
+@dns.command(name="enum")
+@click.argument("domain")
+@click.option("-o", "--output", default=None, help="Save results as JSON")
+def dns_enum(domain, output):
+    """Enumerate common subdomains for DOMAIN."""
+    from .dns import enumerate_subdomains, print_subdomain_results
+    from .report import to_json
+
+    console.print(f"[cyan]Enumerating subdomains for [bold]{domain}[/bold]...[/cyan]")
+    found = enumerate_subdomains(domain)
+    print_subdomain_results(domain, found)
+    if output:
+        to_json(found, output)
+
+
+@dns.command(name="reverse")
+@click.argument("ip")
+def dns_reverse(ip):
+    """Reverse DNS lookup for IP."""
+    from .dns import reverse_dns
+
+    hostname = reverse_dns(ip)
+    if hostname:
+        console.print(f"[green]{ip}[/green] → [bold]{hostname}[/bold]")
+    else:
+        console.print(f"[dim]No PTR record for {ip}[/dim]")
