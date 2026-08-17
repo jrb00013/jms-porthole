@@ -128,7 +128,11 @@ def sysinfo(host, username, password, output):
 @click.option("-o", "--output", default=None, help="Save results as JSON")
 @click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
 @click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
-def scan(target, ports, preset, threads, output, json_out, csv_out):
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="Scan every host in this file (one per line) instead of just HOST_OR_CIDR")
+@click.option("--parallel", "parallel_n", default=10, show_default=True,
+              help="Max hosts to scan concurrently when --hosts-file is used")
+def scan(target, ports, preset, threads, output, json_out, csv_out, hosts_file, parallel_n):
     """Scan a host or CIDR network for open ports / live hosts.
 
     Port presets: --preset web|db|remote|devops|all
@@ -137,8 +141,37 @@ def scan(target, ports, preset, threads, output, json_out, csv_out):
     from .scan_cli_extras import resolve_port_preset
     from .output import emit
     from .store import record_run
+    from .fleet import hosts_from_file, run_over_hosts
 
     quiet = json_out or csv_out
+
+    if preset:
+        port_list = resolve_port_preset(preset)
+    elif ports:
+        port_list = [int(p) for p in ports.split(",")]
+    else:
+        port_list = list(COMMON_PORTS.keys())
+
+    if hosts_file:
+        targets = hosts_from_file(hosts_file)
+        if not quiet:
+            console.print(f"[cyan]Scanning {len(targets)} host(s) from {hosts_file} "
+                          f"({parallel_n} parallel)...[/cyan]")
+        by_host = run_over_hosts(targets, lambda h: scan_ports(h, port_list, threads), parallel=parallel_n)
+        all_rows = []
+        for h, results in by_host.items():
+            record_run("scan", h, [{"port": k, "info": v} for k, v in results.items()] if isinstance(results, dict) else [])
+            if isinstance(results, dict):
+                for k, v in results.items():
+                    all_rows.append({"host": h, "port": k, "info": v})
+        if not emit(all_rows, json_out, csv_out, output, rows=all_rows):
+            for h, results in by_host.items():
+                if isinstance(results, dict):
+                    print_scan_results(h, results)
+                else:
+                    console.print(f"[red]{h}: {results}[/red]")
+        return
+
     if "/" in target:
         if not quiet:
             console.print(f"[cyan]Scanning network [bold]{target}[/bold]...[/cyan]")
@@ -148,12 +181,6 @@ def scan(target, ports, preset, threads, output, json_out, csv_out):
         if not emit(live, json_out, csv_out, output, rows=rows):
             print_network_results(target, live)
     else:
-        if preset:
-            port_list = resolve_port_preset(preset)
-        elif ports:
-            port_list = [int(p) for p in ports.split(",")]
-        else:
-            port_list = list(COMMON_PORTS.keys())
         if not quiet:
             console.print(f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]")
         results = scan_ports(target, port_list, threads)
@@ -349,7 +376,7 @@ def ls_remote(host, path, username, password):
 # ── SPRAY ─────────────────────────────────────────────────────────────────────
 
 @main.command()
-@click.argument("hosts", nargs=-1, required=True)
+@click.argument("hosts", nargs=-1)
 @click.option("-u", "--usernames", required=True, help="Comma-separated usernames")
 @click.option("-p", "--passwords", required=True, help="Comma-separated passwords")
 @click.option("--port", default=22, show_default=True)
@@ -357,16 +384,30 @@ def ls_remote(host, path, username, password):
 @click.option("-o", "--output", default=None, help="Save hits as JSON")
 @click.option("--save-hits", is_flag=True, default=False,
               help="Store valid credentials in the OS keyring instead of/alongside -o")
-def spray(hosts, usernames, passwords, port, threads, output, save_hits):
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="Add every host in this file (one per line) to the spray target list")
+@click.option("--parallel", "parallel_n", default=None, type=int,
+              help="Alias for --threads when driving the target list via --hosts-file")
+def spray(hosts, usernames, passwords, port, threads, output, save_hits, hosts_file, parallel_n):
     """SSH credential spray across hosts. For authorized testing only."""
     from .spray import spray_hosts, print_spray_results, store_hits_in_keyring
     from .report import to_json
+    from .fleet import hosts_from_file
 
     u_list = [u.strip() for u in usernames.split(",")]
     p_list = [p.strip() for p in passwords.split(",")]
 
+    target_hosts = list(hosts)
+    if hosts_file:
+        target_hosts += hosts_from_file(hosts_file)
+    if not target_hosts:
+        console.print("[red]No hosts provided. Pass HOST args and/or --hosts-file.[/red]")
+        sys.exit(1)
+
+    effective_threads = parallel_n if parallel_n is not None else threads
+
     console.print(f"[yellow]⚠ For authorized use only[/yellow]")
-    results = spray_hosts(list(hosts), u_list, p_list, port, threads)
+    results = spray_hosts(target_hosts, u_list, p_list, port, effective_threads)
     print_spray_results(results)
 
     if save_hits:
@@ -395,19 +436,53 @@ def knock(host, ports, proto, delay):
 # ── NETMAP ────────────────────────────────────────────────────────────────────
 
 @main.command()
-@click.argument("cidr")
+@click.argument("cidr", required=False, default=None)
 @click.option("--no-dns", is_flag=True, help="Skip reverse DNS lookups")
 @click.option("--threads", default=50, show_default=True)
 @click.option("-o", "--output", default=None)
 @click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
 @click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
-def netmap(cidr, no_dns, threads, output, json_out, csv_out):
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="Map every CIDR in this file (one per line) instead of just CIDR")
+@click.option("--parallel", "parallel_n", default=5, show_default=True,
+              help="Max networks to map concurrently when --hosts-file is used")
+def netmap(cidr, no_dns, threads, output, json_out, csv_out, hosts_file, parallel_n):
     """Network map — ICMP/TCP ping sweep with reverse DNS."""
     from .netmap import map_network, print_map_results
     from .output import emit
     from .store import record_run
+    from .fleet import hosts_from_file, run_over_hosts
 
     quiet = json_out or csv_out
+
+    if not cidr and not hosts_file:
+        console.print("[red]Provide a CIDR argument or --hosts-file.[/red]")
+        sys.exit(1)
+
+    if hosts_file:
+        targets = hosts_from_file(hosts_file)
+        if not quiet:
+            console.print(f"[cyan]Mapping {len(targets)} network(s) from {hosts_file} "
+                          f"({parallel_n} parallel)...[/cyan]")
+        by_cidr = run_over_hosts(
+            targets, lambda c: map_network(c, resolve_dns=not no_dns, threads=threads), parallel=parallel_n
+        )
+        all_rows = []
+        for c, results in by_cidr.items():
+            record_run("netmap", c, results if isinstance(results, list) else [])
+            if isinstance(results, list):
+                for r in results:
+                    row = dict(r) if isinstance(r, dict) else {"result": r}
+                    row.setdefault("cidr", c)
+                    all_rows.append(row)
+        if not emit(all_rows, json_out, csv_out, output, rows=all_rows):
+            for c, results in by_cidr.items():
+                if isinstance(results, list):
+                    print_map_results(c, results)
+                else:
+                    console.print(f"[red]{c}: {results}[/red]")
+        return
+
     if not quiet:
         console.print(f"[cyan]Mapping [bold]{cidr}[/bold]...[/cyan]")
     results = map_network(cidr, resolve_dns=not no_dns, threads=threads)
@@ -739,14 +814,41 @@ def procs_services(host, username, password, state):
 
 
 @procs.command(name="ps")
-@click.argument("host")
+@click.argument("host", required=False, default=None)
 @click.option("-u", "--username", default=None)
 @click.option("-p", "--password", default=None)
 @click.option("--sort", "sort_by", default="cpu", type=click.Choice(["cpu", "mem", "pid"]))
 @click.option("-n", "--limit", default=20, show_default=True)
-def procs_ps(host, username, password, sort_by, limit):
-    """List top processes on HOST."""
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="List top processes across every host in this file instead of just HOST")
+@click.option("--parallel", "parallel_n", default=10, show_default=True,
+              help="Max hosts to query concurrently when --hosts-file is used")
+def procs_ps(host, username, password, sort_by, limit, hosts_file, parallel_n):
+    """List top processes on HOST (or every host in --hosts-file)."""
     from .procs import list_processes, print_processes
+    from .fleet import hosts_from_file, run_over_hosts
+
+    if hosts_file:
+        targets = hosts_from_file(hosts_file)
+        username, password = get_credentials(username, password)
+        console.print(f"[cyan]Listing top processes across {len(targets)} host(s) "
+                      f"({parallel_n} parallel)...[/cyan]")
+
+        def _one(h):
+            rh, ru, rp = resolve_host(h, username, password)
+            return list_processes(rh, ru or username, rp or password, sort_by=sort_by, limit=limit)
+
+        by_host = run_over_hosts(targets, _one, parallel=parallel_n)
+        for h, procs in by_host.items():
+            if isinstance(procs, Exception):
+                console.print(f"[red]{h}: {procs}[/red]")
+            else:
+                print_processes(h, procs)
+        return
+
+    if not host:
+        console.print("[red]Provide a HOST argument or --hosts-file.[/red]")
+        sys.exit(1)
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
