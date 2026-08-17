@@ -51,6 +51,22 @@ def spray_hosts(hosts: list[str], usernames: list[str], passwords: list[str],
     return results
 
 
+def store_hits_in_keyring(results: list[dict]) -> int:
+    """
+    Persist any valid (host, username, password) hits to the OS keyring
+    instead of leaving them only in the in-memory results list / an -o JSON
+    file. Returns the number of hits successfully stored.
+    """
+    from .keyring_store import store_password
+
+    stored = 0
+    for r in results:
+        if r.get("success"):
+            if store_password(r["host"], r["username"], r["password"]):
+                stored += 1
+    return stored
+
+
 def print_spray_results(results: list[dict]):
     hits = [r for r in results if r["success"]]
     misses = [r for r in results if not r["success"]]

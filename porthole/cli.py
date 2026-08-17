@@ -355,9 +355,11 @@ def ls_remote(host, path, username, password):
 @click.option("--port", default=22, show_default=True)
 @click.option("--threads", default=10, show_default=True)
 @click.option("-o", "--output", default=None, help="Save hits as JSON")
-def spray(hosts, usernames, passwords, port, threads, output):
+@click.option("--save-hits", is_flag=True, default=False,
+              help="Store valid credentials in the OS keyring instead of/alongside -o")
+def spray(hosts, usernames, passwords, port, threads, output, save_hits):
     """SSH credential spray across hosts. For authorized testing only."""
-    from .spray import spray_hosts, print_spray_results
+    from .spray import spray_hosts, print_spray_results, store_hits_in_keyring
     from .report import to_json
 
     u_list = [u.strip() for u in usernames.split(",")]
@@ -366,7 +368,14 @@ def spray(hosts, usernames, passwords, port, threads, output):
     console.print(f"[yellow]⚠ For authorized use only[/yellow]")
     results = spray_hosts(list(hosts), u_list, p_list, port, threads)
     print_spray_results(results)
+
+    if save_hits:
+        stored = store_hits_in_keyring(results)
+        console.print(f"[green]{stored} valid credential(s) saved to the OS keyring[/green]")
+
     if output:
+        console.print("[yellow]⚠ -o writes valid credentials to a plaintext JSON file — "
+                      "prefer --save-hits (OS keyring) for anything sensitive[/yellow]")
         to_json([r for r in results if r["success"]], output)
 
 
