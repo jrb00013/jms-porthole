@@ -136,12 +136,14 @@ def scan(target, ports, preset, threads, output, json_out, csv_out):
     from .scanner import scan_ports, scan_network, print_scan_results, print_network_results, COMMON_PORTS
     from .scan_cli_extras import resolve_port_preset
     from .output import emit
+    from .store import record_run
 
     quiet = json_out or csv_out
     if "/" in target:
         if not quiet:
             console.print(f"[cyan]Scanning network [bold]{target}[/bold]...[/cyan]")
         live = scan_network(target, threads)
+        record_run("scan", target, live)
         rows = [{"host": h} for h in live]
         if not emit(live, json_out, csv_out, output, rows=rows):
             print_network_results(target, live)
@@ -156,6 +158,7 @@ def scan(target, ports, preset, threads, output, json_out, csv_out):
             console.print(f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]")
         results = scan_ports(target, port_list, threads)
         rows = [{"port": k, "info": v} for k, v in results.items()]
+        record_run("scan", target, rows)
         if not emit(rows, json_out, csv_out, output, rows=rows):
             print_scan_results(target, results)
 
@@ -387,16 +390,21 @@ def knock(host, ports, proto, delay):
 @click.option("--no-dns", is_flag=True, help="Skip reverse DNS lookups")
 @click.option("--threads", default=50, show_default=True)
 @click.option("-o", "--output", default=None)
-def netmap(cidr, no_dns, threads, output):
+@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
+@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
+def netmap(cidr, no_dns, threads, output, json_out, csv_out):
     """Network map — ICMP/TCP ping sweep with reverse DNS."""
     from .netmap import map_network, print_map_results
-    from .report import to_json
+    from .output import emit
+    from .store import record_run
 
-    console.print(f"[cyan]Mapping [bold]{cidr}[/bold]...[/cyan]")
+    quiet = json_out or csv_out
+    if not quiet:
+        console.print(f"[cyan]Mapping [bold]{cidr}[/bold]...[/cyan]")
     results = map_network(cidr, resolve_dns=not no_dns, threads=threads)
-    print_map_results(cidr, results)
-    if output:
-        to_json(results, output)
+    record_run("netmap", cidr, results)
+    if not emit(results, json_out, csv_out, output, rows=results if isinstance(results, list) else None):
+        print_map_results(cidr, results)
 
 
 @main.command()
@@ -549,18 +557,32 @@ def health(host, checks, output, json_out, csv_out, hosts_file, parallel_n):
 
 @main.command()
 @click.argument("host")
-@click.argument("path_a")
+@click.argument("path_a", required=False)
 @click.argument("path_b", required=False)
 @click.option("-u", "--username", default=None)
 @click.option("-p", "--password", default=None)
 @click.option("--local", "local_path", default=None, help="Compare LOCAL file against remote PATH_A")
-def diff(host, path_a, path_b, username, password, local_path):
-    """Compare files on HOST or local vs remote.
+@click.option("--history", "use_history", is_flag=True, default=False,
+              help="Diff HOST's stored scan/vuln/netmap result against its last recorded run")
+@click.option("--kind", default="scan", show_default=True,
+              help="Result kind to diff against history (scan|vuln|netmap)")
+def diff(host, path_a, path_b, username, password, local_path, use_history, kind):
+    """Compare files on HOST or local vs remote, or diff a result kind against its stored history.
 
     Remote vs remote: jms diff HOST /etc/a.conf /etc/b.conf
     Local vs remote:  jms diff HOST /etc/app.conf --local ./app.conf
+    Against history:  jms diff HOST --history --kind scan
     """
-    from .diff import diff_local_remote, diff_remote_remote
+    from .diff import diff_local_remote, diff_remote_remote, diff_against_history
+
+    if use_history:
+        from .store import last_run
+        previous = last_run(kind, host)
+        if previous is None:
+            console.print(f"[red]No stored '{kind}' history for {host}. Run 'jms {kind} {host}' first.[/red]")
+            sys.exit(1)
+        diff_against_history(kind, host, previous["data"])
+        return
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
@@ -570,7 +592,7 @@ def diff(host, path_a, path_b, username, password, local_path):
     elif path_b:
         diff_remote_remote(host, username, password, path_a, path_b)
     else:
-        console.print("[red]Provide PATH_B or --local LOCAL_PATH[/red]")
+        console.print("[red]Provide PATH_B or --local LOCAL_PATH, or use --history[/red]")
         sys.exit(1)
 
 # ── SECRETS ───────────────────────────────────────────────────────────────────
@@ -604,19 +626,25 @@ def secrets(host, username, password, paths, ext, output):
 @click.option("-u", "--username", default=None)
 @click.option("-p", "--password", default=None)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-def vuln(host, username, password, output):
+@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
+@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
+def vuln(host, username, password, output, json_out, csv_out):
     """Run security posture checks on HOST."""
     from .vuln import run_vuln_checks, print_vuln_results
-    from .report import to_json
+    from .output import emit
+    from .store import record_run
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
 
-    console.print(f"[cyan]Running security checks on [bold]{host}[/bold]...[/cyan]")
+    quiet = json_out or csv_out
+    if not quiet:
+        console.print(f"[cyan]Running security checks on [bold]{host}[/bold]...[/cyan]")
     results = run_vuln_checks(host, username, password)
-    print_vuln_results(host, results)
-    if output:
-        to_json(results, output)
+    record_run("vuln", host, results)
+    if not emit(results, json_out, csv_out, output,
+                rows=results if isinstance(results, list) else None):
+        print_vuln_results(host, results)
 
 # ── CERT ──────────────────────────────────────────────────────────────────────
 
