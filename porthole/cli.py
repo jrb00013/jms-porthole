@@ -850,24 +850,45 @@ def dns_reverse(ip):
 @click.argument("checks", nargs=-1, required=True)
 @click.option("--interval", default=60, show_default=True, help="Check interval in seconds")
 @click.option("--webhook", default=None, help="Webhook URL for failure alerts")
-@click.option("--slack", is_flag=True, help="Send Slack-formatted webhook payload")
+@click.option("--extra-webhook", "extra_webhooks", multiple=True,
+              help="Additional generic webhook URL(s) to also notify (repeatable)")
+@click.option("--slack", is_flag=True, help="Send Slack-formatted webhook payload for --webhook")
+@click.option("--email-to", default=None, help="Send email alerts to this address")
+@click.option("--smtp-host", default=None, help="SMTP host (required with --email-to)")
+@click.option("--smtp-port", default=587, show_default=True)
+@click.option("--smtp-from", default=None, help="Email From address (defaults to --email-to)")
+@click.option("--smtp-user", default=None, help="SMTP auth username")
+@click.option("--smtp-password", default=None, help="SMTP auth password")
 @click.option("--once", is_flag=True, help="Run once and exit (no loop)")
-def alert(host, checks, interval, webhook, slack, once):
-    """Monitor HOST health checks and alert on failure.
+def alert(host, checks, interval, webhook, extra_webhooks, slack,
+         email_to, smtp_host, smtp_port, smtp_from, smtp_user, smtp_password, once):
+    """Monitor HOST health checks and alert on failure via webhook/Slack/email.
 
     Check specs: tcp:22  http:80/  https:443/api
     """
     from .alert import run_alert_loop
     from .health import parse_check_specs
+    from .sinks import EmailSink
 
     check_list = parse_check_specs(checks)
     if not check_list:
         console.print("[red]No valid checks specified.[/red]")
         sys.exit(1)
 
+    extra_sinks = []
+    if email_to:
+        if not smtp_host:
+            console.print("[red]--email-to requires --smtp-host[/red]")
+            sys.exit(1)
+        extra_sinks.append(EmailSink(
+            smtp_host, from_addr=smtp_from or email_to, to_addr=email_to,
+            smtp_port=smtp_port, username=smtp_user, password=smtp_password,
+        ))
+
     max_iter = 1 if once else None
     run_alert_loop(host, check_list, interval=interval, webhook=webhook,
-                   slack=slack, max_iterations=max_iter)
+                   slack=slack, max_iterations=max_iter,
+                   sinks=extra_sinks, extra_webhooks=list(extra_webhooks))
 
 
 # ── LOGSEARCH ─────────────────────────────────────────────────────────────────
