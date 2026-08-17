@@ -80,8 +80,8 @@ for the exact commit sequence):
    instead of only two ad-hoc files.
 5. **Fleet-wide parallel execution.** A shared `--hosts-file`/`--parallel N`
    convention (`porthole/fleet.py`, built on `concurrent.futures`, mirroring
-   the pattern already proven in `harvest.py`/`spray.py`) extended to
-   `health`, `procs`, and `netmap`.
+   the pattern already proven in `harvest.py`/`spray.py`), extended to
+   `health`, `scan`, `spray`, `procs ps`, and `netmap`.
 6. **Real vault integration.** Make `keyring_store.py` the actual credential
    path: `config.py`/`spray.py`/`cli.py` resolve passwords through the OS
    keyring first (with the existing plaintext JSON as an explicit, warned
@@ -97,9 +97,15 @@ for the exact commit sequence):
    commit landing on this branch, in Keep-a-Changelog format, updated going
    forward.
 
+10. **CI workflow.** `.github/workflows/ci.yml` installs the package and
+    runs the full pytest suite on every push and pull request across
+    Python 3.9/3.11/3.12.
+
 ## Explicitly out of scope for this pass
 
-Full `asyncssh` migration, a `pass`/HashiCorp Vault backend, and CI
-workflow files are noted as good future follow-ups but are not required to
-land the above — see the "Deferred" section of the PR description for what
-was and wasn't completed in this iteration.
+A full `asyncssh`-based rewrite of the concurrency model (thread-pool
+`concurrent.futures` is kept as the deliberate, sufficient choice) and a
+`pass`/HashiCorp Vault secrets backend (the OS keyring, via the `keyring`
+package, is kept as the deliberate, sufficient choice) are explicitly out
+of scope by decision — not gaps, not partially-wired stubs. See the PR
+description for the final completion status of every other item above.
