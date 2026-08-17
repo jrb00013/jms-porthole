@@ -126,33 +126,68 @@ def sysinfo(host, username, password, output):
               help="Port preset shortcut")
 @click.option("--threads", default=100, show_default=True)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-def scan(target, ports, preset, threads, output):
+@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
+@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="Scan every host in this file (one per line) instead of just HOST_OR_CIDR")
+@click.option("--parallel", "parallel_n", default=10, show_default=True,
+              help="Max hosts to scan concurrently when --hosts-file is used")
+def scan(target, ports, preset, threads, output, json_out, csv_out, hosts_file, parallel_n):
     """Scan a host or CIDR network for open ports / live hosts.
 
     Port presets: --preset web|db|remote|devops|all
     """
     from .scanner import scan_ports, scan_network, print_scan_results, print_network_results, COMMON_PORTS
     from .scan_cli_extras import resolve_port_preset
-    from .report import to_json
+    from .output import emit
+    from .store import record_run
+    from .fleet import hosts_from_file, run_over_hosts
+
+    quiet = json_out or csv_out
+
+    if preset:
+        port_list = resolve_port_preset(preset)
+    elif ports:
+        port_list = [int(p) for p in ports.split(",")]
+    else:
+        port_list = list(COMMON_PORTS.keys())
+
+    if hosts_file:
+        targets = hosts_from_file(hosts_file)
+        if not quiet:
+            console.print(f"[cyan]Scanning {len(targets)} host(s) from {hosts_file} "
+                          f"({parallel_n} parallel)...[/cyan]")
+        by_host = run_over_hosts(targets, lambda h: scan_ports(h, port_list, threads), parallel=parallel_n)
+        all_rows = []
+        for h, results in by_host.items():
+            record_run("scan", h, [{"port": k, "info": v} for k, v in results.items()] if isinstance(results, dict) else [])
+            if isinstance(results, dict):
+                for k, v in results.items():
+                    all_rows.append({"host": h, "port": k, "info": v})
+        if not emit(all_rows, json_out, csv_out, output, rows=all_rows):
+            for h, results in by_host.items():
+                if isinstance(results, dict):
+                    print_scan_results(h, results)
+                else:
+                    console.print(f"[red]{h}: {results}[/red]")
+        return
 
     if "/" in target:
-        console.print(f"[cyan]Scanning network [bold]{target}[/bold]...[/cyan]")
+        if not quiet:
+            console.print(f"[cyan]Scanning network [bold]{target}[/bold]...[/cyan]")
         live = scan_network(target, threads)
-        print_network_results(target, live)
-        if output:
-            to_json(live, output)
+        record_run("scan", target, live)
+        rows = [{"host": h} for h in live]
+        if not emit(live, json_out, csv_out, output, rows=rows):
+            print_network_results(target, live)
     else:
-        if preset:
-            port_list = resolve_port_preset(preset)
-        elif ports:
-            port_list = [int(p) for p in ports.split(",")]
-        else:
-            port_list = list(COMMON_PORTS.keys())
-        console.print(f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]")
+        if not quiet:
+            console.print(f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]")
         results = scan_ports(target, port_list, threads)
-        print_scan_results(target, results)
-        if output:
-            to_json([{"port": k, "info": v} for k, v in results.items()], output)
+        rows = [{"port": k, "info": v} for k, v in results.items()]
+        record_run("scan", target, rows)
+        if not emit(rows, json_out, csv_out, output, rows=rows):
+            print_scan_results(target, results)
 
 
 # ── PROBE ─────────────────────────────────────────────────────────────────────
@@ -341,24 +376,47 @@ def ls_remote(host, path, username, password):
 # ── SPRAY ─────────────────────────────────────────────────────────────────────
 
 @main.command()
-@click.argument("hosts", nargs=-1, required=True)
+@click.argument("hosts", nargs=-1)
 @click.option("-u", "--usernames", required=True, help="Comma-separated usernames")
 @click.option("-p", "--passwords", required=True, help="Comma-separated passwords")
 @click.option("--port", default=22, show_default=True)
 @click.option("--threads", default=10, show_default=True)
 @click.option("-o", "--output", default=None, help="Save hits as JSON")
-def spray(hosts, usernames, passwords, port, threads, output):
+@click.option("--save-hits", is_flag=True, default=False,
+              help="Store valid credentials in the OS keyring instead of/alongside -o")
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="Add every host in this file (one per line) to the spray target list")
+@click.option("--parallel", "parallel_n", default=None, type=int,
+              help="Alias for --threads when driving the target list via --hosts-file")
+def spray(hosts, usernames, passwords, port, threads, output, save_hits, hosts_file, parallel_n):
     """SSH credential spray across hosts. For authorized testing only."""
-    from .spray import spray_hosts, print_spray_results
+    from .spray import spray_hosts, print_spray_results, store_hits_in_keyring
     from .report import to_json
+    from .fleet import hosts_from_file
 
     u_list = [u.strip() for u in usernames.split(",")]
     p_list = [p.strip() for p in passwords.split(",")]
 
+    target_hosts = list(hosts)
+    if hosts_file:
+        target_hosts += hosts_from_file(hosts_file)
+    if not target_hosts:
+        console.print("[red]No hosts provided. Pass HOST args and/or --hosts-file.[/red]")
+        sys.exit(1)
+
+    effective_threads = parallel_n if parallel_n is not None else threads
+
     console.print(f"[yellow]⚠ For authorized use only[/yellow]")
-    results = spray_hosts(list(hosts), u_list, p_list, port, threads)
+    results = spray_hosts(target_hosts, u_list, p_list, port, effective_threads)
     print_spray_results(results)
+
+    if save_hits:
+        stored = store_hits_in_keyring(results)
+        console.print(f"[green]{stored} valid credential(s) saved to the OS keyring[/green]")
+
     if output:
+        console.print("[yellow]⚠ -o writes valid credentials to a plaintext JSON file — "
+                      "prefer --save-hits (OS keyring) for anything sensitive[/yellow]")
         to_json([r for r in results if r["success"]], output)
 
 
@@ -378,20 +436,59 @@ def knock(host, ports, proto, delay):
 # ── NETMAP ────────────────────────────────────────────────────────────────────
 
 @main.command()
-@click.argument("cidr")
+@click.argument("cidr", required=False, default=None)
 @click.option("--no-dns", is_flag=True, help="Skip reverse DNS lookups")
 @click.option("--threads", default=50, show_default=True)
 @click.option("-o", "--output", default=None)
-def netmap(cidr, no_dns, threads, output):
+@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
+@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="Map every CIDR in this file (one per line) instead of just CIDR")
+@click.option("--parallel", "parallel_n", default=5, show_default=True,
+              help="Max networks to map concurrently when --hosts-file is used")
+def netmap(cidr, no_dns, threads, output, json_out, csv_out, hosts_file, parallel_n):
     """Network map — ICMP/TCP ping sweep with reverse DNS."""
     from .netmap import map_network, print_map_results
-    from .report import to_json
+    from .output import emit
+    from .store import record_run
+    from .fleet import hosts_from_file, run_over_hosts
 
-    console.print(f"[cyan]Mapping [bold]{cidr}[/bold]...[/cyan]")
+    quiet = json_out or csv_out
+
+    if not cidr and not hosts_file:
+        console.print("[red]Provide a CIDR argument or --hosts-file.[/red]")
+        sys.exit(1)
+
+    if hosts_file:
+        targets = hosts_from_file(hosts_file)
+        if not quiet:
+            console.print(f"[cyan]Mapping {len(targets)} network(s) from {hosts_file} "
+                          f"({parallel_n} parallel)...[/cyan]")
+        by_cidr = run_over_hosts(
+            targets, lambda c: map_network(c, resolve_dns=not no_dns, threads=threads), parallel=parallel_n
+        )
+        all_rows = []
+        for c, results in by_cidr.items():
+            record_run("netmap", c, results if isinstance(results, list) else [])
+            if isinstance(results, list):
+                for r in results:
+                    row = dict(r) if isinstance(r, dict) else {"result": r}
+                    row.setdefault("cidr", c)
+                    all_rows.append(row)
+        if not emit(all_rows, json_out, csv_out, output, rows=all_rows):
+            for c, results in by_cidr.items():
+                if isinstance(results, list):
+                    print_map_results(c, results)
+                else:
+                    console.print(f"[red]{c}: {results}[/red]")
+        return
+
+    if not quiet:
+        console.print(f"[cyan]Mapping [bold]{cidr}[/bold]...[/cyan]")
     results = map_network(cidr, resolve_dns=not no_dns, threads=threads)
-    print_map_results(cidr, results)
-    if output:
-        to_json(results, output)
+    record_run("netmap", cidr, results)
+    if not emit(results, json_out, csv_out, output, rows=results if isinstance(results, list) else None):
+        print_map_results(cidr, results)
 
 
 @main.command()
@@ -438,49 +535,138 @@ def hosts_remove(alias):
     """Remove a saved host alias."""
     from .config import delete_host
     delete_host(alias)
+
+
+# ── PROFILES ──────────────────────────────────────────────────────────────────
+
+@main.group()
+def profile():
+    """Manage named host-group profiles (~/.porthole/profiles/*.yaml)."""
+    pass
+
+
+@profile.command(name="add")
+@click.argument("name")
+@click.argument("hosts_list", nargs=-1, required=True)
+@click.option("-u", "--username", default=None)
+@click.option("--ports", default="", help="Comma-separated default ports, e.g. 22,80,443")
+@click.option("--timeout", default=10, show_default=True)
+@click.option("--jump-host", default=None, help="Optional SSH jump host")
+def profile_add(name, hosts_list, username, ports, timeout, jump_host):
+    """Save a profile: jms profile add prod-web 10.0.0.1 10.0.0.2 -u deploy --ports 80,443"""
+    from .profiles import save_profile
+    port_list = [int(p) for p in ports.split(",") if p.strip()] if ports else []
+    path = save_profile(name, list(hosts_list), username=username, ports=port_list,
+                         timeout=timeout, jump_host=jump_host)
+    console.print(f"[green]Saved profile '[bold]{name}[/bold]' → {path}[/green]")
+
+
+@profile.command(name="list")
+def profile_list():
+    """List saved profiles."""
+    from .profiles import print_profiles
+    print_profiles()
+
+
+@profile.command(name="show")
+@click.argument("name")
+def profile_show(name):
+    """Show one profile's details."""
+    from .profiles import print_profile
+    print_profile(name)
+
+
+@profile.command(name="remove")
+@click.argument("name")
+def profile_remove(name):
+    """Delete a saved profile."""
+    from .profiles import delete_profile
+    if delete_profile(name):
+        console.print(f"[yellow]Removed profile '{name}'[/yellow]")
+    else:
+        console.print(f"[red]No profile named '{name}'[/red]")
+
+
 # ── HEALTH ────────────────────────────────────────────────────────────────────
 
 @main.command()
 @click.argument("host")
 @click.argument("checks", nargs=-1, required=True)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-def health(host, checks, output):
-    """Run HTTP/TCP health checks on HOST.
+@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
+@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="Run checks across every host in this file (one per line) instead of just HOST")
+@click.option("--parallel", "parallel_n", default=10, show_default=True,
+              help="Max hosts to check concurrently when --hosts-file is used")
+def health(host, checks, output, json_out, csv_out, hosts_file, parallel_n):
+    """Run HTTP/TCP health checks on HOST (or every host in --hosts-file).
 
     Check specs: tcp:22  http:80/  https:443/api
     """
-    from .health import run_health_checks, print_health_results
-    from .health import parse_check_specs
-    from .report import to_json
+    from .health import run_health_checks, print_health_results, parse_check_specs
+    from .output import emit
+    from .fleet import hosts_from_file, run_over_hosts
 
     check_list = parse_check_specs(checks)
     if not check_list:
         console.print("[red]No valid checks specified. Use tcp:PORT or http:PORT/path[/red]")
         sys.exit(1)
 
-    console.print(f"[cyan]Running {len(check_list)} health check(s) on [bold]{host}[/bold]...[/cyan]")
+    quiet = json_out or csv_out
+
+    if hosts_file:
+        targets = hosts_from_file(hosts_file)
+        if not quiet:
+            console.print(f"[cyan]Running {len(check_list)} health check(s) across {len(targets)} host(s) "
+                          f"({parallel_n} parallel)...[/cyan]")
+        by_host = run_over_hosts(targets, lambda h: run_health_checks(h, check_list), parallel=parallel_n)
+        all_rows = []
+        for h, results in by_host.items():
+            for r in results:
+                all_rows.append({"host": h, **r})
+        if not emit(all_rows, json_out, csv_out, output, rows=all_rows):
+            for h, results in by_host.items():
+                print_health_results(h, results)
+        return
+
+    if not quiet:
+        console.print(f"[cyan]Running {len(check_list)} health check(s) on [bold]{host}[/bold]...[/cyan]")
     results = run_health_checks(host, check_list)
-    print_health_results(host, results)
-    if output:
-        to_json(results, output)
+    if not emit(results, json_out, csv_out, output, rows=results):
+        print_health_results(host, results)
 
 
 # ── DIFF ──────────────────────────────────────────────────────────────────────
 
 @main.command()
 @click.argument("host")
-@click.argument("path_a")
+@click.argument("path_a", required=False)
 @click.argument("path_b", required=False)
 @click.option("-u", "--username", default=None)
 @click.option("-p", "--password", default=None)
 @click.option("--local", "local_path", default=None, help="Compare LOCAL file against remote PATH_A")
-def diff(host, path_a, path_b, username, password, local_path):
-    """Compare files on HOST or local vs remote.
+@click.option("--history", "use_history", is_flag=True, default=False,
+              help="Diff HOST's stored scan/vuln/netmap result against its last recorded run")
+@click.option("--kind", default="scan", show_default=True,
+              help="Result kind to diff against history (scan|vuln|netmap)")
+def diff(host, path_a, path_b, username, password, local_path, use_history, kind):
+    """Compare files on HOST or local vs remote, or diff a result kind against its stored history.
 
     Remote vs remote: jms diff HOST /etc/a.conf /etc/b.conf
     Local vs remote:  jms diff HOST /etc/app.conf --local ./app.conf
+    Against history:  jms diff HOST --history --kind scan
     """
-    from .diff import diff_local_remote, diff_remote_remote
+    from .diff import diff_local_remote, diff_remote_remote, diff_against_history
+
+    if use_history:
+        from .store import last_run
+        previous = last_run(kind, host)
+        if previous is None:
+            console.print(f"[red]No stored '{kind}' history for {host}. Run 'jms {kind} {host}' first.[/red]")
+            sys.exit(1)
+        diff_against_history(kind, host, previous["data"])
+        return
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
@@ -490,7 +676,7 @@ def diff(host, path_a, path_b, username, password, local_path):
     elif path_b:
         diff_remote_remote(host, username, password, path_a, path_b)
     else:
-        console.print("[red]Provide PATH_B or --local LOCAL_PATH[/red]")
+        console.print("[red]Provide PATH_B or --local LOCAL_PATH, or use --history[/red]")
         sys.exit(1)
 
 # ── SECRETS ───────────────────────────────────────────────────────────────────
@@ -524,19 +710,25 @@ def secrets(host, username, password, paths, ext, output):
 @click.option("-u", "--username", default=None)
 @click.option("-p", "--password", default=None)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-def vuln(host, username, password, output):
+@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
+@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
+def vuln(host, username, password, output, json_out, csv_out):
     """Run security posture checks on HOST."""
     from .vuln import run_vuln_checks, print_vuln_results
-    from .report import to_json
+    from .output import emit
+    from .store import record_run
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
 
-    console.print(f"[cyan]Running security checks on [bold]{host}[/bold]...[/cyan]")
+    quiet = json_out or csv_out
+    if not quiet:
+        console.print(f"[cyan]Running security checks on [bold]{host}[/bold]...[/cyan]")
     results = run_vuln_checks(host, username, password)
-    print_vuln_results(host, results)
-    if output:
-        to_json(results, output)
+    record_run("vuln", host, results)
+    if not emit(results, json_out, csv_out, output,
+                rows=results if isinstance(results, list) else None):
+        print_vuln_results(host, results)
 
 # ── CERT ──────────────────────────────────────────────────────────────────────
 
@@ -622,14 +814,41 @@ def procs_services(host, username, password, state):
 
 
 @procs.command(name="ps")
-@click.argument("host")
+@click.argument("host", required=False, default=None)
 @click.option("-u", "--username", default=None)
 @click.option("-p", "--password", default=None)
 @click.option("--sort", "sort_by", default="cpu", type=click.Choice(["cpu", "mem", "pid"]))
 @click.option("-n", "--limit", default=20, show_default=True)
-def procs_ps(host, username, password, sort_by, limit):
-    """List top processes on HOST."""
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="List top processes across every host in this file instead of just HOST")
+@click.option("--parallel", "parallel_n", default=10, show_default=True,
+              help="Max hosts to query concurrently when --hosts-file is used")
+def procs_ps(host, username, password, sort_by, limit, hosts_file, parallel_n):
+    """List top processes on HOST (or every host in --hosts-file)."""
     from .procs import list_processes, print_processes
+    from .fleet import hosts_from_file, run_over_hosts
+
+    if hosts_file:
+        targets = hosts_from_file(hosts_file)
+        username, password = get_credentials(username, password)
+        console.print(f"[cyan]Listing top processes across {len(targets)} host(s) "
+                      f"({parallel_n} parallel)...[/cyan]")
+
+        def _one(h):
+            rh, ru, rp = resolve_host(h, username, password)
+            return list_processes(rh, ru or username, rp or password, sort_by=sort_by, limit=limit)
+
+        by_host = run_over_hosts(targets, _one, parallel=parallel_n)
+        for h, procs in by_host.items():
+            if isinstance(procs, Exception):
+                console.print(f"[red]{h}: {procs}[/red]")
+            else:
+                print_processes(h, procs)
+        return
+
+    if not host:
+        console.print("[red]Provide a HOST argument or --hosts-file.[/red]")
+        sys.exit(1)
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
@@ -733,24 +952,81 @@ def dns_reverse(ip):
 @click.argument("checks", nargs=-1, required=True)
 @click.option("--interval", default=60, show_default=True, help="Check interval in seconds")
 @click.option("--webhook", default=None, help="Webhook URL for failure alerts")
-@click.option("--slack", is_flag=True, help="Send Slack-formatted webhook payload")
+@click.option("--extra-webhook", "extra_webhooks", multiple=True,
+              help="Additional generic webhook URL(s) to also notify (repeatable)")
+@click.option("--slack", is_flag=True, help="Send Slack-formatted webhook payload for --webhook")
+@click.option("--email-to", default=None, help="Send email alerts to this address")
+@click.option("--smtp-host", default=None, help="SMTP host (required with --email-to)")
+@click.option("--smtp-port", default=587, show_default=True)
+@click.option("--smtp-from", default=None, help="Email From address (defaults to --email-to)")
+@click.option("--smtp-user", default=None, help="SMTP auth username")
+@click.option("--smtp-password", default=None, help="SMTP auth password")
 @click.option("--once", is_flag=True, help="Run once and exit (no loop)")
-def alert(host, checks, interval, webhook, slack, once):
-    """Monitor HOST health checks and alert on failure.
+def alert(host, checks, interval, webhook, extra_webhooks, slack,
+         email_to, smtp_host, smtp_port, smtp_from, smtp_user, smtp_password, once):
+    """Monitor HOST health checks and alert on failure via webhook/Slack/email.
 
     Check specs: tcp:22  http:80/  https:443/api
     """
     from .alert import run_alert_loop
     from .health import parse_check_specs
+    from .sinks import EmailSink
 
     check_list = parse_check_specs(checks)
     if not check_list:
         console.print("[red]No valid checks specified.[/red]")
         sys.exit(1)
 
+    extra_sinks = []
+    if email_to:
+        if not smtp_host:
+            console.print("[red]--email-to requires --smtp-host[/red]")
+            sys.exit(1)
+        extra_sinks.append(EmailSink(
+            smtp_host, from_addr=smtp_from or email_to, to_addr=email_to,
+            smtp_port=smtp_port, username=smtp_user, password=smtp_password,
+        ))
+
     max_iter = 1 if once else None
     run_alert_loop(host, check_list, interval=interval, webhook=webhook,
-                   slack=slack, max_iterations=max_iter)
+                   slack=slack, max_iterations=max_iter,
+                   sinks=extra_sinks, extra_webhooks=list(extra_webhooks))
+
+
+# ── DAEMON ────────────────────────────────────────────────────────────────────
+# (Named `daemon`, not `watch` — `jms watch` already tails a remote file.)
+
+@main.command()
+@click.argument("host")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--interval", default="5m", show_default=True,
+              help="Human duration between checks, e.g. 30s, 5m, 1h")
+@click.option("--checks", "check_specs", multiple=True, default=("tcp:22",), show_default=True,
+              help="Health check specs to run each interval (tcp:PORT / http:PORT/path)")
+@click.option("--once", is_flag=True, help="Run one iteration and exit (useful for testing/cron)")
+def daemon(host, username, password, interval, check_specs, once):
+    """Scheduled/daemon mode: run health checks on HOST on a fixed interval.
+
+    jms daemon HOST --interval 5m --checks tcp:22 --checks https:443/
+    """
+    from .schedule_util import parse_duration
+    from .health import parse_check_specs
+    from .alert import run_alert_loop
+
+    try:
+        interval_seconds = parse_duration(interval)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        sys.exit(1)
+
+    check_list = parse_check_specs(check_specs)
+    if not check_list:
+        console.print("[red]No valid checks specified.[/red]")
+        sys.exit(1)
+
+    max_iter = 1 if once else None
+    run_alert_loop(host, check_list, interval=int(interval_seconds), max_iterations=max_iter)
 
 
 # ── LOGSEARCH ─────────────────────────────────────────────────────────────────

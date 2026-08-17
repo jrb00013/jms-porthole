@@ -37,6 +37,32 @@ def diff_local_remote(host: str, username: str, password: str,
     console.print(Syntax(diff_text, "diff", theme="monokai", line_numbers=False))
 
 
+def diff_against_history(kind: str, target: str, current_data) -> None:
+    """
+    Diff `current_data` (e.g. a fresh scan/vuln/netmap result) against the
+    last stored run of the same (kind, target) in the persistent results
+    store, printing what was added/removed. Always records the new run.
+    """
+    from .store import diff_since_last
+
+    result = diff_since_last(kind, target, current_data)
+
+    if not result["has_previous"]:
+        console.print(f"[dim]No previous '{kind}' run recorded for {target} — this run is now the baseline.[/dim]")
+        return
+
+    if not result["changed"]:
+        console.print(f"[green]No change since last '{kind}' run for {target} "
+                     f"({result['previous_ts']}).[/green]")
+        return
+
+    console.print(f"[yellow]Changes since last '{kind}' run for {target} ({result['previous_ts']}):[/yellow]")
+    for item in (result["added"] or []):
+        console.print(f"  [green]+ {item}[/green]")
+    for item in (result["removed"] or []):
+        console.print(f"  [red]- {item}[/red]")
+
+
 def diff_remote_remote(host: str, username: str, password: str,
                        path_a: str, path_b: str):
     from .ssh import SSHClient

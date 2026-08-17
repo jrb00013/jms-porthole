@@ -30,10 +30,25 @@ def _save(data: dict):
 
 
 def save_host(alias: str, host: str, username: str, password: str = "", port: int = 22):
+    from . import keyring_store
+
+    stored_in_keyring = False
+    if password:
+        stored_in_keyring = keyring_store.store_password(alias, username, password)
+
     data = _load()
-    data[alias] = {"host": host, "username": username, "password": password, "port": port}
+    # Never write the plaintext password to disk if the keyring accepted it.
+    data[alias] = {
+        "host": host,
+        "username": username,
+        "password": "" if stored_in_keyring else password,
+        "port": port,
+        "keyring": stored_in_keyring,
+    }
     _save(data)
-    console.print(f"[green]Saved host '[bold]{alias}[/bold]' → {username}@{host}:{port}[/green]")
+
+    where = "OS keyring" if stored_in_keyring else "plain config (no keyring backend available)"
+    console.print(f"[green]Saved host '[bold]{alias}[/bold]' → {username}@{host}:{port}[/green] [dim]({where})[/dim]")
 
 
 def get_host(alias: str) -> dict | None:
@@ -41,8 +56,11 @@ def get_host(alias: str) -> dict | None:
 
 
 def delete_host(alias: str):
+    from . import keyring_store
+
     data = _load()
     if alias in data:
+        keyring_store.delete_password(alias, data[alias].get("username", ""))
         del data[alias]
         _save(data)
         console.print(f"[yellow]Removed '[bold]{alias}[/bold]'[/yellow]")
@@ -72,8 +90,13 @@ def resolve(alias_or_host: str) -> tuple[str, str, str, int] | None:
     """
     Resolve an alias or raw host. Returns (host, username, password, port) or None.
     """
+    from . import keyring_store
+
     data = _load()
     if alias_or_host in data:
         e = data[alias_or_host]
-        return e["host"], e["username"], e.get("password", ""), e.get("port", 22)
+        password = e.get("password", "")
+        if e.get("keyring"):
+            password = keyring_store.get_password(alias_or_host, e["username"]) or password
+        return e["host"], e["username"], password, e.get("port", 22)
     return None
