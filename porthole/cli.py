@@ -891,6 +891,42 @@ def alert(host, checks, interval, webhook, extra_webhooks, slack,
                    sinks=extra_sinks, extra_webhooks=list(extra_webhooks))
 
 
+# ── DAEMON ────────────────────────────────────────────────────────────────────
+# (Named `daemon`, not `watch` — `jms watch` already tails a remote file.)
+
+@main.command()
+@click.argument("host")
+@click.option("-u", "--username", default=None)
+@click.option("-p", "--password", default=None)
+@click.option("--interval", default="5m", show_default=True,
+              help="Human duration between checks, e.g. 30s, 5m, 1h")
+@click.option("--checks", "check_specs", multiple=True, default=("tcp:22",), show_default=True,
+              help="Health check specs to run each interval (tcp:PORT / http:PORT/path)")
+@click.option("--once", is_flag=True, help="Run one iteration and exit (useful for testing/cron)")
+def daemon(host, username, password, interval, check_specs, once):
+    """Scheduled/daemon mode: run health checks on HOST on a fixed interval.
+
+    jms daemon HOST --interval 5m --checks tcp:22 --checks https:443/
+    """
+    from .schedule_util import parse_duration
+    from .health import parse_check_specs
+    from .alert import run_alert_loop
+
+    try:
+        interval_seconds = parse_duration(interval)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        sys.exit(1)
+
+    check_list = parse_check_specs(check_specs)
+    if not check_list:
+        console.print("[red]No valid checks specified.[/red]")
+        sys.exit(1)
+
+    max_iter = 1 if once else None
+    run_alert_loop(host, check_list, interval=int(interval_seconds), max_iterations=max_iter)
+
+
 # ── LOGSEARCH ─────────────────────────────────────────────────────────────────
 
 @main.command(name="logsearch")
