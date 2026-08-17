@@ -438,6 +438,58 @@ def hosts_remove(alias):
     """Remove a saved host alias."""
     from .config import delete_host
     delete_host(alias)
+
+
+# ── PROFILES ──────────────────────────────────────────────────────────────────
+
+@main.group()
+def profile():
+    """Manage named host-group profiles (~/.porthole/profiles/*.yaml)."""
+    pass
+
+
+@profile.command(name="add")
+@click.argument("name")
+@click.argument("hosts_list", nargs=-1, required=True)
+@click.option("-u", "--username", default=None)
+@click.option("--ports", default="", help="Comma-separated default ports, e.g. 22,80,443")
+@click.option("--timeout", default=10, show_default=True)
+@click.option("--jump-host", default=None, help="Optional SSH jump host")
+def profile_add(name, hosts_list, username, ports, timeout, jump_host):
+    """Save a profile: jms profile add prod-web 10.0.0.1 10.0.0.2 -u deploy --ports 80,443"""
+    from .profiles import save_profile
+    port_list = [int(p) for p in ports.split(",") if p.strip()] if ports else []
+    path = save_profile(name, list(hosts_list), username=username, ports=port_list,
+                         timeout=timeout, jump_host=jump_host)
+    console.print(f"[green]Saved profile '[bold]{name}[/bold]' → {path}[/green]")
+
+
+@profile.command(name="list")
+def profile_list():
+    """List saved profiles."""
+    from .profiles import print_profiles
+    print_profiles()
+
+
+@profile.command(name="show")
+@click.argument("name")
+def profile_show(name):
+    """Show one profile's details."""
+    from .profiles import print_profile
+    print_profile(name)
+
+
+@profile.command(name="remove")
+@click.argument("name")
+def profile_remove(name):
+    """Delete a saved profile."""
+    from .profiles import delete_profile
+    if delete_profile(name):
+        console.print(f"[yellow]Removed profile '{name}'[/yellow]")
+    else:
+        console.print(f"[red]No profile named '{name}'[/red]")
+
+
 # ── HEALTH ────────────────────────────────────────────────────────────────────
 
 @main.command()
