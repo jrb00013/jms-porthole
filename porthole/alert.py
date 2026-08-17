@@ -1,59 +1,51 @@
 """
-Alerting — periodic health checks with webhook notifications on failure.
+Alerting — periodic health checks with pluggable notification sinks
+(webhook, Slack, email — see sinks.py) on failure.
 """
-import json
 import time
-import urllib.request
-import urllib.error
 from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 from .health import run_health_checks
+from .sinks import Sink, WebhookSink, SlackSink, notify_all
 
 console = Console()
 
 
 def send_webhook(url: str, payload: dict, timeout: float = 10.0) -> bool:
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        url, data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return 200 <= resp.status < 300
-    except (urllib.error.URLError, urllib.error.HTTPError):
-        return False
+    """Kept for backward compatibility — prefer sinks.WebhookSink/notify_all."""
+    from .sinks import _post_json
+    return _post_json(url, payload, timeout)
 
 
-def _build_slack_payload(host: str, failures: list[dict]) -> dict:
-    lines = [f"*{host}* health check failed:"]
-    for f in failures:
-        lines.append(f"• {f['name']}: {f.get('error', f.get('status', 'down'))}")
-    return {"text": "\n".join(lines)}
-
-
-def _build_generic_payload(host: str, failures: list[dict]) -> dict:
-    return {
-        "host": host,
-        "timestamp": datetime.now().isoformat(),
-        "status": "failed",
-        "failures": failures,
-    }
+def build_sinks(webhook: str = None, slack: bool = False, extra_webhooks: list[str] = None,
+                 sinks: list[Sink] = None) -> list[Sink]:
+    """
+    Build the sink list for an alert run from CLI-friendly convenience args
+    plus any pre-built Sink objects (e.g. an EmailSink) the caller supplies.
+    """
+    built: list[Sink] = list(sinks or [])
+    if webhook:
+        built.append(SlackSink(webhook) if slack else WebhookSink(webhook))
+    for url in (extra_webhooks or []):
+        built.append(WebhookSink(url))
+    return built
 
 
 def run_alert_loop(host: str, checks: list[dict], interval: int = 60,
                    webhook: str = None, slack: bool = False,
-                   max_iterations: int = None):
-    """Run health checks on interval. Alert via webhook on any failure."""
+                   max_iterations: int = None, sinks: list[Sink] = None,
+                   extra_webhooks: list[str] = None):
+    """Run health checks on interval. Notify every configured sink on failure."""
     iteration = 0
     last_alert_time = 0
     alert_cooldown = interval
 
+    active_sinks = build_sinks(webhook=webhook, slack=slack, extra_webhooks=extra_webhooks, sinks=sinks)
+
     console.print(f"[cyan]Monitoring {host} every {interval}s[/cyan]")
-    if webhook:
-        console.print(f"[dim]Webhook: {webhook}[/dim]")
+    if active_sinks:
+        console.print(f"[dim]Sinks: {', '.join(s.name for s in active_sinks)}[/dim]")
     console.print("[dim]Press Ctrl+C to stop[/dim]\n")
 
     try:
@@ -88,13 +80,15 @@ def run_alert_loop(host: str, checks: list[dict], interval: int = 60,
             console.clear()
             console.print(table)
 
-            if failures and webhook and (now - last_alert_time) >= alert_cooldown:
-                payload = _build_slack_payload(host, failures) if slack else _build_generic_payload(host, failures)
-                if send_webhook(webhook, payload):
-                    console.print(f"[yellow]⚠ Alert sent for {len(failures)} failure(s)[/yellow]")
+            if failures and active_sinks and (now - last_alert_time) >= alert_cooldown:
+                outcomes = notify_all(active_sinks, host, failures)
+                ok = [name for name, sent in outcomes.items() if sent]
+                failed = [name for name, sent in outcomes.items() if not sent]
+                if ok:
+                    console.print(f"[yellow]⚠ Alert sent for {len(failures)} failure(s) via {', '.join(ok)}[/yellow]")
                     last_alert_time = now
-                else:
-                    console.print("[red]Failed to send webhook alert[/red]")
+                if failed:
+                    console.print(f"[red]Failed to notify: {', '.join(failed)}[/red]")
             elif failures:
                 console.print(f"[yellow]⚠ {len(failures)} check(s) failing[/yellow]")
 
