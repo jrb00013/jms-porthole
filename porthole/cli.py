@@ -126,21 +126,25 @@ def sysinfo(host, username, password, output):
               help="Port preset shortcut")
 @click.option("--threads", default=100, show_default=True)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-def scan(target, ports, preset, threads, output):
+@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
+@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
+def scan(target, ports, preset, threads, output, json_out, csv_out):
     """Scan a host or CIDR network for open ports / live hosts.
 
     Port presets: --preset web|db|remote|devops|all
     """
     from .scanner import scan_ports, scan_network, print_scan_results, print_network_results, COMMON_PORTS
     from .scan_cli_extras import resolve_port_preset
-    from .report import to_json
+    from .output import emit
 
+    quiet = json_out or csv_out
     if "/" in target:
-        console.print(f"[cyan]Scanning network [bold]{target}[/bold]...[/cyan]")
+        if not quiet:
+            console.print(f"[cyan]Scanning network [bold]{target}[/bold]...[/cyan]")
         live = scan_network(target, threads)
-        print_network_results(target, live)
-        if output:
-            to_json(live, output)
+        rows = [{"host": h} for h in live]
+        if not emit(live, json_out, csv_out, output, rows=rows):
+            print_network_results(target, live)
     else:
         if preset:
             port_list = resolve_port_preset(preset)
@@ -148,11 +152,12 @@ def scan(target, ports, preset, threads, output):
             port_list = [int(p) for p in ports.split(",")]
         else:
             port_list = list(COMMON_PORTS.keys())
-        console.print(f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]")
+        if not quiet:
+            console.print(f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]")
         results = scan_ports(target, port_list, threads)
-        print_scan_results(target, results)
-        if output:
-            to_json([{"port": k, "info": v} for k, v in results.items()], output)
+        rows = [{"port": k, "info": v} for k, v in results.items()]
+        if not emit(rows, json_out, csv_out, output, rows=rows):
+            print_scan_results(target, results)
 
 
 # ── PROBE ─────────────────────────────────────────────────────────────────────
@@ -496,25 +501,48 @@ def profile_remove(name):
 @click.argument("host")
 @click.argument("checks", nargs=-1, required=True)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-def health(host, checks, output):
-    """Run HTTP/TCP health checks on HOST.
+@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
+@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
+@click.option("--hosts-file", default=None, type=click.Path(exists=True),
+              help="Run checks across every host in this file (one per line) instead of just HOST")
+@click.option("--parallel", "parallel_n", default=10, show_default=True,
+              help="Max hosts to check concurrently when --hosts-file is used")
+def health(host, checks, output, json_out, csv_out, hosts_file, parallel_n):
+    """Run HTTP/TCP health checks on HOST (or every host in --hosts-file).
 
     Check specs: tcp:22  http:80/  https:443/api
     """
-    from .health import run_health_checks, print_health_results
-    from .health import parse_check_specs
-    from .report import to_json
+    from .health import run_health_checks, print_health_results, parse_check_specs
+    from .output import emit
+    from .fleet import hosts_from_file, run_over_hosts
 
     check_list = parse_check_specs(checks)
     if not check_list:
         console.print("[red]No valid checks specified. Use tcp:PORT or http:PORT/path[/red]")
         sys.exit(1)
 
-    console.print(f"[cyan]Running {len(check_list)} health check(s) on [bold]{host}[/bold]...[/cyan]")
+    quiet = json_out or csv_out
+
+    if hosts_file:
+        targets = hosts_from_file(hosts_file)
+        if not quiet:
+            console.print(f"[cyan]Running {len(check_list)} health check(s) across {len(targets)} host(s) "
+                          f"({parallel_n} parallel)...[/cyan]")
+        by_host = run_over_hosts(targets, lambda h: run_health_checks(h, check_list), parallel=parallel_n)
+        all_rows = []
+        for h, results in by_host.items():
+            for r in results:
+                all_rows.append({"host": h, **r})
+        if not emit(all_rows, json_out, csv_out, output, rows=all_rows):
+            for h, results in by_host.items():
+                print_health_results(h, results)
+        return
+
+    if not quiet:
+        console.print(f"[cyan]Running {len(check_list)} health check(s) on [bold]{host}[/bold]...[/cyan]")
     results = run_health_checks(host, check_list)
-    print_health_results(host, results)
-    if output:
-        to_json(results, output)
+    if not emit(results, json_out, csv_out, output, rows=results):
+        print_health_results(host, results)
 
 
 # ── DIFF ──────────────────────────────────────────────────────────────────────
