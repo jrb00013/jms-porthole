@@ -1,6 +1,7 @@
 """Unit tests for porthole.dns — parsing/shaping logic, no real DNS queries."""
+
 import socket
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from porthole import dns as dns_mod
 
@@ -38,8 +39,10 @@ def test_reverse_dns_failure_returns_empty_string():
 
 def test_dig_uses_dig_when_available():
     fake_result = MagicMock(stdout="203.0.113.5\n")
-    with patch("shutil.which", return_value="/usr/bin/dig"), \
-         patch("subprocess.run", return_value=fake_result) as run_mock:
+    with (
+        patch("shutil.which", return_value="/usr/bin/dig"),
+        patch("subprocess.run", return_value=fake_result) as run_mock,
+    ):
         out = dns_mod._dig("example.com", "A")
     assert out == "203.0.113.5"
     args = run_mock.call_args[0][0]
@@ -52,9 +55,11 @@ def test_dig_returns_empty_when_no_tool_available():
 
 
 def test_lookup_records_combines_a_and_dig_types():
-    with patch.object(dns_mod, "lookup_a", return_value=["1.2.3.4"]), \
-         patch.object(dns_mod, "lookup_aaaa", return_value=[]), \
-         patch.object(dns_mod, "_dig", return_value="mail.example.com."):
+    with (
+        patch.object(dns_mod, "lookup_a", return_value=["1.2.3.4"]),
+        patch.object(dns_mod, "lookup_aaaa", return_value=[]),
+        patch.object(dns_mod, "_dig", return_value="mail.example.com."),
+    ):
         records = dns_mod.lookup_records("example.com", rtypes=["A", "AAAA", "MX"])
 
     assert records["A"] == ["1.2.3.4"]

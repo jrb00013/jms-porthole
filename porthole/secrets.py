@@ -1,9 +1,12 @@
 """
 Remote secret scanning — find exposed credentials, API keys, and private keys.
 """
+
 import re
+
 from rich.console import Console
 from rich.table import Table
+
 from .ssh import SSHClient
 
 console = Console()
@@ -31,15 +34,22 @@ def _build_grep_cmd(paths: list[str], extensions: str = None) -> str:
     if extensions:
         exts = extensions.split(",")
         ext_filter = " ".join(f"-name '*.{e}' -o" for e in exts).rstrip(" -o")
-        find_cmd = f"find {path_str} -type f \\( {ext_filter} \\) -size -{MAX_FILE_SIZE}c 2>/dev/null"
+        find_cmd = (
+            f"find {path_str} -type f \\( {ext_filter} \\) -size -{MAX_FILE_SIZE}c 2>/dev/null"
+        )
     else:
         find_cmd = f"find {path_str} -type f -size -{MAX_FILE_SIZE}c 2>/dev/null"
     return find_cmd
 
 
-def scan_remote(host: str, username: str, password: str,
-                paths: list[str] = None, extensions: str = None,
-                max_files: int = 500) -> list[dict]:
+def scan_remote(
+    host: str,
+    username: str,
+    password: str,
+    paths: list[str] = None,
+    extensions: str = None,
+    max_files: int = 500,
+) -> list[dict]:
     paths = paths or DEFAULT_PATHS
     findings = []
 
@@ -56,12 +66,14 @@ def scan_remote(host: str, username: str, password: str,
                     continue
                 for i, line in enumerate(content.splitlines(), 1):
                     if regex.search(line):
-                        findings.append({
-                            "file": filepath,
-                            "line": i,
-                            "type": pattern_name,
-                            "snippet": line.strip()[:120],
-                        })
+                        findings.append(
+                            {
+                                "file": filepath,
+                                "line": i,
+                                "type": pattern_name,
+                                "snippet": line.strip()[:120],
+                            }
+                        )
 
     return findings
 

@@ -2,9 +2,13 @@
 Config file support: ~/.config/jms/hosts.json
 Lets you save hosts with credentials so you don't retype them.
 """
+
+from __future__ import annotations
+
 import json
 import os
 from pathlib import Path
+
 from rich.console import Console
 from rich.table import Table
 
@@ -48,7 +52,9 @@ def save_host(alias: str, host: str, username: str, password: str = "", port: in
     _save(data)
 
     where = "OS keyring" if stored_in_keyring else "plain config (no keyring backend available)"
-    console.print(f"[green]Saved host '[bold]{alias}[/bold]' → {username}@{host}:{port}[/green] [dim]({where})[/dim]")
+    console.print(
+        f"[green]Saved host '[bold]{alias}[/bold]' → {username}@{host}:{port}[/green] [dim]({where})[/dim]"
+    )
 
 
 def get_host(alias: str) -> dict | None:

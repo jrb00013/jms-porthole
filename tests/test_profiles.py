@@ -1,4 +1,5 @@
 """Unit tests for porthole.profiles — uses a tmp_path instead of ~/.porthole."""
+
 from porthole import profiles
 
 

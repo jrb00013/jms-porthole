@@ -1,7 +1,9 @@
 import sys
+
 import click
 from rich.console import Console
-from rich.panel import Panel
+
+from .core import __version__
 
 console = Console()
 
@@ -27,6 +29,7 @@ def get_credentials(username, password):
 def resolve_host(alias_or_host: str, username, password):
     """Resolve alias from config, fall back to raw host + prompted creds."""
     from .config import resolve
+
     resolved = resolve(alias_or_host)
     if resolved:
         host, u, p, _ = resolved
@@ -34,14 +37,15 @@ def resolve_host(alias_or_host: str, username, password):
     return alias_or_host, username, password
 
 
-@click.group()
-@click.version_option("0.1.0", prog_name="jms")
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(__version__, prog_name="jms")
 def main():
     """JMS Porthole — Janus Monitoring Suite. Remote monitoring, broadcasting & recon toolkit."""
     pass
 
 
 # ── BROADCAST ────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -50,8 +54,9 @@ def main():
 @click.option("--stop", is_flag=True, help="Stop the broadcast on remote host")
 def broadcast(host, username, password, stop):
     """Start (or stop) a VNC desktop broadcast from HOST."""
-    from .broadcast import start_broadcast, stop_broadcast, print_connection_info
     import time
+
+    from .broadcast import print_connection_info, start_broadcast, stop_broadcast
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
@@ -78,6 +83,7 @@ def broadcast(host, username, password, stop):
 
 # ── MONITOR ───────────────────────────────────────────────────────────────────
 
+
 @main.command()
 @click.argument("host")
 @click.option("-u", "--username", default=None)
@@ -86,12 +92,14 @@ def broadcast(host, username, password, stop):
 def monitor(host, username, password, interval):
     """Live system monitor (CPU, RAM, disk, processes) on HOST."""
     from .monitor import run_monitor
+
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     run_monitor(host, username, password, interval)
 
 
 # ── SYSINFO ───────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -100,9 +108,9 @@ def monitor(host, username, password, interval):
 @click.option("-o", "--output", default=None, help="Save as JSON to this path")
 def sysinfo(host, username, password, output):
     """Dump full system info from HOST."""
-    from .sysinfo import collect_sysinfo, print_sysinfo
     from .report import to_json
     from .ssh import SSHClient
+    from .sysinfo import collect_sysinfo, print_sysinfo
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
@@ -119,29 +127,53 @@ def sysinfo(host, username, password, output):
 
 # ── SCAN ──────────────────────────────────────────────────────────────────────
 
+
 @main.command()
 @click.argument("target", metavar="HOST_OR_CIDR")
 @click.option("--ports", default=None, help="Comma-separated ports (default: common)")
-@click.option("--preset", default=None, type=click.Choice(["web", "db", "remote", "devops", "all"]),
-              help="Port preset shortcut")
+@click.option(
+    "--preset",
+    default=None,
+    type=click.Choice(["web", "db", "remote", "devops", "all"]),
+    help="Port preset shortcut",
+)
 @click.option("--threads", default=100, show_default=True)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
-@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
-@click.option("--hosts-file", default=None, type=click.Path(exists=True),
-              help="Scan every host in this file (one per line) instead of just HOST_OR_CIDR")
-@click.option("--parallel", "parallel_n", default=10, show_default=True,
-              help="Max hosts to scan concurrently when --hosts-file is used")
+@click.option(
+    "--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout"
+)
+@click.option(
+    "--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout"
+)
+@click.option(
+    "--hosts-file",
+    default=None,
+    type=click.Path(exists=True),
+    help="Scan every host in this file (one per line) instead of just HOST_OR_CIDR",
+)
+@click.option(
+    "--parallel",
+    "parallel_n",
+    default=10,
+    show_default=True,
+    help="Max hosts to scan concurrently when --hosts-file is used",
+)
 def scan(target, ports, preset, threads, output, json_out, csv_out, hosts_file, parallel_n):
     """Scan a host or CIDR network for open ports / live hosts.
 
     Port presets: --preset web|db|remote|devops|all
     """
-    from .scanner import scan_ports, scan_network, print_scan_results, print_network_results, COMMON_PORTS
-    from .scan_cli_extras import resolve_port_preset
-    from .output import emit
-    from .store import record_run
     from .fleet import hosts_from_file, run_over_hosts
+    from .output import emit
+    from .scan_cli_extras import resolve_port_preset
+    from .scanner import (
+        COMMON_PORTS,
+        print_network_results,
+        print_scan_results,
+        scan_network,
+        scan_ports,
+    )
+    from .store import record_run
 
     quiet = json_out or csv_out
 
@@ -155,12 +187,22 @@ def scan(target, ports, preset, threads, output, json_out, csv_out, hosts_file, 
     if hosts_file:
         targets = hosts_from_file(hosts_file)
         if not quiet:
-            console.print(f"[cyan]Scanning {len(targets)} host(s) from {hosts_file} "
-                          f"({parallel_n} parallel)...[/cyan]")
-        by_host = run_over_hosts(targets, lambda h: scan_ports(h, port_list, threads), parallel=parallel_n)
+            console.print(
+                f"[cyan]Scanning {len(targets)} host(s) from {hosts_file} "
+                f"({parallel_n} parallel)...[/cyan]"
+            )
+        by_host = run_over_hosts(
+            targets, lambda h: scan_ports(h, port_list, threads), parallel=parallel_n
+        )
         all_rows = []
         for h, results in by_host.items():
-            record_run("scan", h, [{"port": k, "info": v} for k, v in results.items()] if isinstance(results, dict) else [])
+            record_run(
+                "scan",
+                h,
+                [{"port": k, "info": v} for k, v in results.items()]
+                if isinstance(results, dict)
+                else [],
+            )
             if isinstance(results, dict):
                 for k, v in results.items():
                     all_rows.append({"host": h, "port": k, "info": v})
@@ -182,7 +224,9 @@ def scan(target, ports, preset, threads, output, json_out, csv_out, hosts_file, 
             print_network_results(target, live)
     else:
         if not quiet:
-            console.print(f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]")
+            console.print(
+                f"[cyan]Scanning [bold]{target}[/bold] ({len(port_list)} ports)...[/cyan]"
+            )
         results = scan_ports(target, port_list, threads)
         rows = [{"port": k, "info": v} for k, v in results.items()]
         record_run("scan", target, rows)
@@ -192,13 +236,14 @@ def scan(target, ports, preset, threads, output, json_out, csv_out, hosts_file, 
 
 # ── PROBE ─────────────────────────────────────────────────────────────────────
 
+
 @main.command()
 @click.argument("host")
 @click.option("--ports", default=None, help="Comma-separated ports to probe")
 @click.option("-o", "--output", default=None, help="Save results as JSON")
 def probe(host, ports, output):
     """Deep service fingerprinting — banner grab, TLS info, version detection."""
-    from .probe import probe_host, print_probe_results
+    from .probe import print_probe_results, probe_host
     from .report import to_json
 
     port_list = [int(p) for p in ports.split(",")] if ports else None
@@ -211,6 +256,7 @@ def probe(host, ports, output):
 
 # ── SHELL ─────────────────────────────────────────────────────────────────────
 
+
 @main.command()
 @click.argument("host")
 @click.option("-u", "--username", default=None)
@@ -218,12 +264,14 @@ def probe(host, ports, output):
 def shell(host, username, password):
     """Open an interactive SSH shell on HOST."""
     from .shell import interactive_shell
+
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     interactive_shell(host, username, password)
 
 
 # ── TUNNEL ────────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -235,12 +283,14 @@ def shell(host, username, password):
 def tunnel(host, local_port, remote_port, username, password, remote_host):
     """Forward LOCAL_PORT through HOST to REMOTE_HOST:REMOTE_PORT."""
     from .tunnel import open_tunnel
+
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     open_tunnel(host, username, password, local_port, remote_host, remote_port)
 
 
 # ── WATCH / LOGS ──────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -251,6 +301,7 @@ def tunnel(host, local_port, remote_port, username, password, remote_host):
 def watch(host, filepath, username, password, lines):
     """Tail -f FILEPATH on HOST with live colorized output."""
     from .watcher import watch_file
+
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     watch_file(host, username, password, filepath, lines)
@@ -264,12 +315,14 @@ def watch(host, filepath, username, password, lines):
 def logs(host, username, password, service):
     """Watch live journalctl logs on HOST."""
     from .watcher import watch_logs
+
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     watch_logs(host, username, password, service)
 
 
 # ── SCREENSHOT ────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -279,12 +332,14 @@ def logs(host, username, password, service):
 def screenshot(host, username, password, output):
     """Capture a screenshot of HOST's desktop and download it."""
     from .screenshot import capture_screenshot
+
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     capture_screenshot(host, username, password, output)
 
 
 # ── HARVEST ───────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("hosts", nargs=-1)
@@ -295,7 +350,8 @@ def screenshot(host, username, password, output):
 @click.option("-o", "--output", default=None, help="Save results as JSON")
 def harvest(hosts, username, password, hosts_file, threads, output):
     """Gather system info from multiple hosts in parallel."""
-    from .harvest import harvest as do_harvest, print_harvest_results
+    from .harvest import harvest as do_harvest
+    from .harvest import print_harvest_results
     from .report import to_json
 
     username, password = get_credentials(username, password)
@@ -316,6 +372,7 @@ def harvest(hosts, username, password, hosts_file, threads, output):
 
 # ── EXEC ──────────────────────────────────────────────────────────────────────
 
+
 @main.command(name="exec")
 @click.argument("hosts", nargs=-1, required=True)
 @click.option("-c", "--command", required=True, help="Command to run")
@@ -325,12 +382,13 @@ def harvest(hosts, username, password, hosts_file, threads, output):
 def exec_cmd(hosts, command, username, password, output):
     """Run COMMAND on multiple hosts in parallel. Use -c 'cmd'."""
     from .shell import run_command_on_hosts
-    from .report import to_json
+
     username, password = get_credentials(username, password)
     run_command_on_hosts(list(hosts), username, password, command)
 
 
 # ── TRANSFER ──────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -341,6 +399,7 @@ def exec_cmd(hosts, command, username, password, output):
 def upload(host, local_path, remote_path, username, password):
     """Upload LOCAL_PATH to HOST:REMOTE_PATH via SFTP."""
     from .transfer import upload_file
+
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     upload_file(host, username, password, local_path, remote_path)
@@ -355,6 +414,7 @@ def upload(host, local_path, remote_path, username, password):
 def download(host, remote_path, local_path, username, password):
     """Download HOST:REMOTE_PATH to LOCAL_PATH via SFTP."""
     from .transfer import download_file
+
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     download_file(host, username, password, remote_path, local_path)
@@ -368,12 +428,14 @@ def download(host, remote_path, local_path, username, password):
 def ls_remote(host, path, username, password):
     """List files on HOST:PATH via SFTP."""
     from .transfer import list_remote_dir
+
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
     list_remote_dir(host, username, password, path)
 
 
 # ── SPRAY ─────────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("hosts", nargs=-1)
@@ -382,17 +444,30 @@ def ls_remote(host, path, username, password):
 @click.option("--port", default=22, show_default=True)
 @click.option("--threads", default=10, show_default=True)
 @click.option("-o", "--output", default=None, help="Save hits as JSON")
-@click.option("--save-hits", is_flag=True, default=False,
-              help="Store valid credentials in the OS keyring instead of/alongside -o")
-@click.option("--hosts-file", default=None, type=click.Path(exists=True),
-              help="Add every host in this file (one per line) to the spray target list")
-@click.option("--parallel", "parallel_n", default=None, type=int,
-              help="Alias for --threads when driving the target list via --hosts-file")
+@click.option(
+    "--save-hits",
+    is_flag=True,
+    default=False,
+    help="Store valid credentials in the OS keyring instead of/alongside -o",
+)
+@click.option(
+    "--hosts-file",
+    default=None,
+    type=click.Path(exists=True),
+    help="Add every host in this file (one per line) to the spray target list",
+)
+@click.option(
+    "--parallel",
+    "parallel_n",
+    default=None,
+    type=int,
+    help="Alias for --threads when driving the target list via --hosts-file",
+)
 def spray(hosts, usernames, passwords, port, threads, output, save_hits, hosts_file, parallel_n):
     """SSH credential spray across hosts. For authorized testing only."""
-    from .spray import spray_hosts, print_spray_results, store_hits_in_keyring
-    from .report import to_json
     from .fleet import hosts_from_file
+    from .report import to_json
+    from .spray import print_spray_results, spray_hosts, store_hits_in_keyring
 
     u_list = [u.strip() for u in usernames.split(",")]
     p_list = [p.strip() for p in passwords.split(",")]
@@ -406,7 +481,7 @@ def spray(hosts, usernames, passwords, port, threads, output, save_hits, hosts_f
 
     effective_threads = parallel_n if parallel_n is not None else threads
 
-    console.print(f"[yellow]⚠ For authorized use only[/yellow]")
+    console.print("[yellow]⚠ For authorized use only[/yellow]")
     results = spray_hosts(target_hosts, u_list, p_list, port, effective_threads)
     print_spray_results(results)
 
@@ -415,12 +490,15 @@ def spray(hosts, usernames, passwords, port, threads, output, save_hits, hosts_f
         console.print(f"[green]{stored} valid credential(s) saved to the OS keyring[/green]")
 
     if output:
-        console.print("[yellow]⚠ -o writes valid credentials to a plaintext JSON file — "
-                      "prefer --save-hits (OS keyring) for anything sensitive[/yellow]")
+        console.print(
+            "[yellow]⚠ -o writes valid credentials to a plaintext JSON file — "
+            "prefer --save-hits (OS keyring) for anything sensitive[/yellow]"
+        )
         to_json([r for r in results if r["success"]], output)
 
 
 # ── KNOCK ─────────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -430,28 +508,43 @@ def spray(hosts, usernames, passwords, port, threads, output, save_hits, hosts_f
 def knock(host, ports, proto, delay):
     """Send a port knock sequence to HOST."""
     from .portknock import knock as do_knock
+
     do_knock(host, list(ports), proto, delay)
 
 
 # ── NETMAP ────────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("cidr", required=False, default=None)
 @click.option("--no-dns", is_flag=True, help="Skip reverse DNS lookups")
 @click.option("--threads", default=50, show_default=True)
 @click.option("-o", "--output", default=None)
-@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
-@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
-@click.option("--hosts-file", default=None, type=click.Path(exists=True),
-              help="Map every CIDR in this file (one per line) instead of just CIDR")
-@click.option("--parallel", "parallel_n", default=5, show_default=True,
-              help="Max networks to map concurrently when --hosts-file is used")
+@click.option(
+    "--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout"
+)
+@click.option(
+    "--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout"
+)
+@click.option(
+    "--hosts-file",
+    default=None,
+    type=click.Path(exists=True),
+    help="Map every CIDR in this file (one per line) instead of just CIDR",
+)
+@click.option(
+    "--parallel",
+    "parallel_n",
+    default=5,
+    show_default=True,
+    help="Max networks to map concurrently when --hosts-file is used",
+)
 def netmap(cidr, no_dns, threads, output, json_out, csv_out, hosts_file, parallel_n):
     """Network map — ICMP/TCP ping sweep with reverse DNS."""
+    from .fleet import hosts_from_file, run_over_hosts
     from .netmap import map_network, print_map_results
     from .output import emit
     from .store import record_run
-    from .fleet import hosts_from_file, run_over_hosts
 
     quiet = json_out or csv_out
 
@@ -462,10 +555,14 @@ def netmap(cidr, no_dns, threads, output, json_out, csv_out, hosts_file, paralle
     if hosts_file:
         targets = hosts_from_file(hosts_file)
         if not quiet:
-            console.print(f"[cyan]Mapping {len(targets)} network(s) from {hosts_file} "
-                          f"({parallel_n} parallel)...[/cyan]")
+            console.print(
+                f"[cyan]Mapping {len(targets)} network(s) from {hosts_file} "
+                f"({parallel_n} parallel)...[/cyan]"
+            )
         by_cidr = run_over_hosts(
-            targets, lambda c: map_network(c, resolve_dns=not no_dns, threads=threads), parallel=parallel_n
+            targets,
+            lambda c: map_network(c, resolve_dns=not no_dns, threads=threads),
+            parallel=parallel_n,
         )
         all_rows = []
         for c, results in by_cidr.items():
@@ -487,7 +584,9 @@ def netmap(cidr, no_dns, threads, output, json_out, csv_out, hosts_file, paralle
         console.print(f"[cyan]Mapping [bold]{cidr}[/bold]...[/cyan]")
     results = map_network(cidr, resolve_dns=not no_dns, threads=threads)
     record_run("netmap", cidr, results)
-    if not emit(results, json_out, csv_out, output, rows=results if isinstance(results, list) else None):
+    if not emit(
+        results, json_out, csv_out, output, rows=results if isinstance(results, list) else None
+    ):
         print_map_results(cidr, results)
 
 
@@ -496,13 +595,16 @@ def netmap(cidr, no_dns, threads, output, json_out, csv_out, hosts_file, paralle
 @click.option("--max-hops", default=20, show_default=True)
 def traceroute(host, max_hops):
     """Traceroute to HOST showing each hop."""
-    from .netmap import traceroute as do_trace, print_traceroute
+    from .netmap import print_traceroute
+    from .netmap import traceroute as do_trace
+
     console.print(f"[cyan]Tracing route to [bold]{host}[/bold]...[/cyan]")
     hops = do_trace(host, max_hops)
     print_traceroute(host, hops)
 
 
 # ── HOST ALIAS MANAGEMENT ─────────────────────────────────────────────────────
+
 
 @main.group()
 def hosts():
@@ -519,6 +621,7 @@ def hosts():
 def hosts_add(alias, host, username, password, port):
     """Save a host alias: jms hosts add prod 192.168.1.10 -u admin"""
     from .config import save_host
+
     save_host(alias, host, username, password, port)
 
 
@@ -526,6 +629,7 @@ def hosts_add(alias, host, username, password, port):
 def hosts_list():
     """List saved host aliases."""
     from .config import list_hosts
+
     list_hosts()
 
 
@@ -534,10 +638,12 @@ def hosts_list():
 def hosts_remove(alias):
     """Remove a saved host alias."""
     from .config import delete_host
+
     delete_host(alias)
 
 
 # ── PROFILES ──────────────────────────────────────────────────────────────────
+
 
 @main.group()
 def profile():
@@ -555,9 +661,16 @@ def profile():
 def profile_add(name, hosts_list, username, ports, timeout, jump_host):
     """Save a profile: jms profile add prod-web 10.0.0.1 10.0.0.2 -u deploy --ports 80,443"""
     from .profiles import save_profile
+
     port_list = [int(p) for p in ports.split(",") if p.strip()] if ports else []
-    path = save_profile(name, list(hosts_list), username=username, ports=port_list,
-                         timeout=timeout, jump_host=jump_host)
+    path = save_profile(
+        name,
+        list(hosts_list),
+        username=username,
+        ports=port_list,
+        timeout=timeout,
+        jump_host=jump_host,
+    )
     console.print(f"[green]Saved profile '[bold]{name}[/bold]' → {path}[/green]")
 
 
@@ -565,6 +678,7 @@ def profile_add(name, hosts_list, username, ports, timeout, jump_host):
 def profile_list():
     """List saved profiles."""
     from .profiles import print_profiles
+
     print_profiles()
 
 
@@ -573,6 +687,7 @@ def profile_list():
 def profile_show(name):
     """Show one profile's details."""
     from .profiles import print_profile
+
     print_profile(name)
 
 
@@ -581,6 +696,7 @@ def profile_show(name):
 def profile_remove(name):
     """Delete a saved profile."""
     from .profiles import delete_profile
+
     if delete_profile(name):
         console.print(f"[yellow]Removed profile '{name}'[/yellow]")
     else:
@@ -589,24 +705,38 @@ def profile_remove(name):
 
 # ── HEALTH ────────────────────────────────────────────────────────────────────
 
+
 @main.command()
 @click.argument("host")
 @click.argument("checks", nargs=-1, required=True)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
-@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
-@click.option("--hosts-file", default=None, type=click.Path(exists=True),
-              help="Run checks across every host in this file (one per line) instead of just HOST")
-@click.option("--parallel", "parallel_n", default=10, show_default=True,
-              help="Max hosts to check concurrently when --hosts-file is used")
+@click.option(
+    "--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout"
+)
+@click.option(
+    "--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout"
+)
+@click.option(
+    "--hosts-file",
+    default=None,
+    type=click.Path(exists=True),
+    help="Run checks across every host in this file (one per line) instead of just HOST",
+)
+@click.option(
+    "--parallel",
+    "parallel_n",
+    default=10,
+    show_default=True,
+    help="Max hosts to check concurrently when --hosts-file is used",
+)
 def health(host, checks, output, json_out, csv_out, hosts_file, parallel_n):
     """Run HTTP/TCP health checks on HOST (or every host in --hosts-file).
 
     Check specs: tcp:22  http:80/  https:443/api
     """
-    from .health import run_health_checks, print_health_results, parse_check_specs
-    from .output import emit
     from .fleet import hosts_from_file, run_over_hosts
+    from .health import parse_check_specs, print_health_results, run_health_checks
+    from .output import emit
 
     check_list = parse_check_specs(checks)
     if not check_list:
@@ -618,9 +748,13 @@ def health(host, checks, output, json_out, csv_out, hosts_file, parallel_n):
     if hosts_file:
         targets = hosts_from_file(hosts_file)
         if not quiet:
-            console.print(f"[cyan]Running {len(check_list)} health check(s) across {len(targets)} host(s) "
-                          f"({parallel_n} parallel)...[/cyan]")
-        by_host = run_over_hosts(targets, lambda h: run_health_checks(h, check_list), parallel=parallel_n)
+            console.print(
+                f"[cyan]Running {len(check_list)} health check(s) across {len(targets)} host(s) "
+                f"({parallel_n} parallel)...[/cyan]"
+            )
+        by_host = run_over_hosts(
+            targets, lambda h: run_health_checks(h, check_list), parallel=parallel_n
+        )
         all_rows = []
         for h, results in by_host.items():
             for r in results:
@@ -631,7 +765,9 @@ def health(host, checks, output, json_out, csv_out, hosts_file, parallel_n):
         return
 
     if not quiet:
-        console.print(f"[cyan]Running {len(check_list)} health check(s) on [bold]{host}[/bold]...[/cyan]")
+        console.print(
+            f"[cyan]Running {len(check_list)} health check(s) on [bold]{host}[/bold]...[/cyan]"
+        )
     results = run_health_checks(host, check_list)
     if not emit(results, json_out, csv_out, output, rows=results):
         print_health_results(host, results)
@@ -639,17 +775,29 @@ def health(host, checks, output, json_out, csv_out, hosts_file, parallel_n):
 
 # ── DIFF ──────────────────────────────────────────────────────────────────────
 
+
 @main.command()
 @click.argument("host")
 @click.argument("path_a", required=False)
 @click.argument("path_b", required=False)
 @click.option("-u", "--username", default=None)
 @click.option("-p", "--password", default=None)
-@click.option("--local", "local_path", default=None, help="Compare LOCAL file against remote PATH_A")
-@click.option("--history", "use_history", is_flag=True, default=False,
-              help="Diff HOST's stored scan/vuln/netmap result against its last recorded run")
-@click.option("--kind", default="scan", show_default=True,
-              help="Result kind to diff against history (scan|vuln|netmap)")
+@click.option(
+    "--local", "local_path", default=None, help="Compare LOCAL file against remote PATH_A"
+)
+@click.option(
+    "--history",
+    "use_history",
+    is_flag=True,
+    default=False,
+    help="Diff HOST's stored scan/vuln/netmap result against its last recorded run",
+)
+@click.option(
+    "--kind",
+    default="scan",
+    show_default=True,
+    help="Result kind to diff against history (scan|vuln|netmap)",
+)
 def diff(host, path_a, path_b, username, password, local_path, use_history, kind):
     """Compare files on HOST or local vs remote, or diff a result kind against its stored history.
 
@@ -657,13 +805,16 @@ def diff(host, path_a, path_b, username, password, local_path, use_history, kind
     Local vs remote:  jms diff HOST /etc/app.conf --local ./app.conf
     Against history:  jms diff HOST --history --kind scan
     """
-    from .diff import diff_local_remote, diff_remote_remote, diff_against_history
+    from .diff import diff_against_history, diff_local_remote, diff_remote_remote
 
     if use_history:
         from .store import last_run
+
         previous = last_run(kind, host)
         if previous is None:
-            console.print(f"[red]No stored '{kind}' history for {host}. Run 'jms {kind} {host}' first.[/red]")
+            console.print(
+                f"[red]No stored '{kind}' history for {host}. Run 'jms {kind} {host}' first.[/red]"
+            )
             sys.exit(1)
         diff_against_history(kind, host, previous["data"])
         return
@@ -679,7 +830,9 @@ def diff(host, path_a, path_b, username, password, local_path, use_history, kind
         console.print("[red]Provide PATH_B or --local LOCAL_PATH, or use --history[/red]")
         sys.exit(1)
 
+
 # ── SECRETS ───────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -690,8 +843,8 @@ def diff(host, path_a, path_b, username, password, local_path, use_history, kind
 @click.option("-o", "--output", default=None, help="Save findings as JSON")
 def secrets(host, username, password, paths, ext, output):
     """Scan HOST for exposed secrets, API keys, and credentials."""
-    from .secrets import scan_remote, print_secret_results
     from .report import to_json
+    from .secrets import print_secret_results, scan_remote
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
@@ -703,20 +856,26 @@ def secrets(host, username, password, paths, ext, output):
     if output:
         to_json(findings, output)
 
+
 # ── VULN ────────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
 @click.option("-u", "--username", default=None)
 @click.option("-p", "--password", default=None)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-@click.option("--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout")
-@click.option("--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout")
+@click.option(
+    "--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout"
+)
+@click.option(
+    "--csv", "csv_out", is_flag=True, default=False, help="Print results as CSV to stdout"
+)
 def vuln(host, username, password, output, json_out, csv_out):
     """Run security posture checks on HOST."""
-    from .vuln import run_vuln_checks, print_vuln_results
     from .output import emit
     from .store import record_run
+    from .vuln import print_vuln_results, run_vuln_checks
 
     host, username, password = resolve_host(host, username, password)
     username, password = get_credentials(username, password)
@@ -726,11 +885,14 @@ def vuln(host, username, password, output, json_out, csv_out):
         console.print(f"[cyan]Running security checks on [bold]{host}[/bold]...[/cyan]")
     results = run_vuln_checks(host, username, password)
     record_run("vuln", host, results)
-    if not emit(results, json_out, csv_out, output,
-                rows=results if isinstance(results, list) else None):
+    if not emit(
+        results, json_out, csv_out, output, rows=results if isinstance(results, list) else None
+    ):
         print_vuln_results(host, results)
 
+
 # ── CERT ──────────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -748,7 +910,9 @@ def cert(host, ports, output):
     if output:
         to_json(results, output)
 
+
 # ── KEYDEPLOY ─────────────────────────────────────────────────────────────────
+
 
 @main.command(name="keydeploy")
 @click.argument("host")
@@ -771,7 +935,9 @@ def keydeploy(host, username, password, key_path, comment, list_keys):
 
     deploy_key(host, username, password, key_path, comment)
 
+
 # ── BACKUP ────────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
@@ -790,7 +956,9 @@ def backup(host, remote_path, username, password, output, exclude):
     exclude_list = [e.strip() for e in exclude.split(",")] if exclude else None
     backup_remote(host, username, password, remote_path, output, exclude_list)
 
+
 # ── PROCS ─────────────────────────────────────────────────────────────────────
+
 
 @main.group()
 def procs():
@@ -819,20 +987,31 @@ def procs_services(host, username, password, state):
 @click.option("-p", "--password", default=None)
 @click.option("--sort", "sort_by", default="cpu", type=click.Choice(["cpu", "mem", "pid"]))
 @click.option("-n", "--limit", default=20, show_default=True)
-@click.option("--hosts-file", default=None, type=click.Path(exists=True),
-              help="List top processes across every host in this file instead of just HOST")
-@click.option("--parallel", "parallel_n", default=10, show_default=True,
-              help="Max hosts to query concurrently when --hosts-file is used")
+@click.option(
+    "--hosts-file",
+    default=None,
+    type=click.Path(exists=True),
+    help="List top processes across every host in this file instead of just HOST",
+)
+@click.option(
+    "--parallel",
+    "parallel_n",
+    default=10,
+    show_default=True,
+    help="Max hosts to query concurrently when --hosts-file is used",
+)
 def procs_ps(host, username, password, sort_by, limit, hosts_file, parallel_n):
     """List top processes on HOST (or every host in --hosts-file)."""
-    from .procs import list_processes, print_processes
     from .fleet import hosts_from_file, run_over_hosts
+    from .procs import list_processes, print_processes
 
     if hosts_file:
         targets = hosts_from_file(hosts_file)
         username, password = get_credentials(username, password)
-        console.print(f"[cyan]Listing top processes across {len(targets)} host(s) "
-                      f"({parallel_n} parallel)...[/cyan]")
+        console.print(
+            f"[cyan]Listing top processes across {len(targets)} host(s) "
+            f"({parallel_n} parallel)...[/cyan]"
+        )
 
         def _one(h):
             rh, ru, rp = resolve_host(h, username, password)
@@ -894,7 +1073,9 @@ def procs_kill(host, pid, username, password, signal):
         console.print(f"[red]Failed:[/red] {msg}")
         sys.exit(1)
 
+
 # ── DNS ───────────────────────────────────────────────────────────────────────
+
 
 @main.group()
 def dns():
@@ -945,15 +1126,21 @@ def dns_reverse(ip):
     else:
         console.print(f"[dim]No PTR record for {ip}[/dim]")
 
+
 # ── ALERT ─────────────────────────────────────────────────────────────────────
+
 
 @main.command()
 @click.argument("host")
 @click.argument("checks", nargs=-1, required=True)
 @click.option("--interval", default=60, show_default=True, help="Check interval in seconds")
 @click.option("--webhook", default=None, help="Webhook URL for failure alerts")
-@click.option("--extra-webhook", "extra_webhooks", multiple=True,
-              help="Additional generic webhook URL(s) to also notify (repeatable)")
+@click.option(
+    "--extra-webhook",
+    "extra_webhooks",
+    multiple=True,
+    help="Additional generic webhook URL(s) to also notify (repeatable)",
+)
 @click.option("--slack", is_flag=True, help="Send Slack-formatted webhook payload for --webhook")
 @click.option("--email-to", default=None, help="Send email alerts to this address")
 @click.option("--smtp-host", default=None, help="SMTP host (required with --email-to)")
@@ -962,8 +1149,21 @@ def dns_reverse(ip):
 @click.option("--smtp-user", default=None, help="SMTP auth username")
 @click.option("--smtp-password", default=None, help="SMTP auth password")
 @click.option("--once", is_flag=True, help="Run once and exit (no loop)")
-def alert(host, checks, interval, webhook, extra_webhooks, slack,
-         email_to, smtp_host, smtp_port, smtp_from, smtp_user, smtp_password, once):
+def alert(
+    host,
+    checks,
+    interval,
+    webhook,
+    extra_webhooks,
+    slack,
+    email_to,
+    smtp_host,
+    smtp_port,
+    smtp_from,
+    smtp_user,
+    smtp_password,
+    once,
+):
     """Monitor HOST health checks and alert on failure via webhook/Slack/email.
 
     Check specs: tcp:22  http:80/  https:443/api
@@ -982,37 +1182,61 @@ def alert(host, checks, interval, webhook, extra_webhooks, slack,
         if not smtp_host:
             console.print("[red]--email-to requires --smtp-host[/red]")
             sys.exit(1)
-        extra_sinks.append(EmailSink(
-            smtp_host, from_addr=smtp_from or email_to, to_addr=email_to,
-            smtp_port=smtp_port, username=smtp_user, password=smtp_password,
-        ))
+        extra_sinks.append(
+            EmailSink(
+                smtp_host,
+                from_addr=smtp_from or email_to,
+                to_addr=email_to,
+                smtp_port=smtp_port,
+                username=smtp_user,
+                password=smtp_password,
+            )
+        )
 
     max_iter = 1 if once else None
-    run_alert_loop(host, check_list, interval=interval, webhook=webhook,
-                   slack=slack, max_iterations=max_iter,
-                   sinks=extra_sinks, extra_webhooks=list(extra_webhooks))
+    run_alert_loop(
+        host,
+        check_list,
+        interval=interval,
+        webhook=webhook,
+        slack=slack,
+        max_iterations=max_iter,
+        sinks=extra_sinks,
+        extra_webhooks=list(extra_webhooks),
+    )
 
 
 # ── DAEMON ────────────────────────────────────────────────────────────────────
 # (Named `daemon`, not `watch` — `jms watch` already tails a remote file.)
 
+
 @main.command()
 @click.argument("host")
 @click.option("-u", "--username", default=None)
 @click.option("-p", "--password", default=None)
-@click.option("--interval", default="5m", show_default=True,
-              help="Human duration between checks, e.g. 30s, 5m, 1h")
-@click.option("--checks", "check_specs", multiple=True, default=("tcp:22",), show_default=True,
-              help="Health check specs to run each interval (tcp:PORT / http:PORT/path)")
+@click.option(
+    "--interval",
+    default="5m",
+    show_default=True,
+    help="Human duration between checks, e.g. 30s, 5m, 1h",
+)
+@click.option(
+    "--checks",
+    "check_specs",
+    multiple=True,
+    default=("tcp:22",),
+    show_default=True,
+    help="Health check specs to run each interval (tcp:PORT / http:PORT/path)",
+)
 @click.option("--once", is_flag=True, help="Run one iteration and exit (useful for testing/cron)")
 def daemon(host, username, password, interval, check_specs, once):
     """Scheduled/daemon mode: run health checks on HOST on a fixed interval.
 
     jms daemon HOST --interval 5m --checks tcp:22 --checks https:443/
     """
-    from .schedule_util import parse_duration
-    from .health import parse_check_specs
     from .alert import run_alert_loop
+    from .health import parse_check_specs
+    from .schedule_util import parse_duration
 
     try:
         interval_seconds = parse_duration(interval)
@@ -1031,6 +1255,7 @@ def daemon(host, username, password, interval, check_specs, once):
 
 # ── LOGSEARCH ─────────────────────────────────────────────────────────────────
 
+
 @main.command(name="logsearch")
 @click.argument("host")
 @click.argument("pattern")
@@ -1042,9 +1267,11 @@ def daemon(host, username, password, interval, check_specs, once):
 @click.option("--files-only", is_flag=True, help="Search log files only")
 @click.option("-n", "--limit", default=100, show_default=True)
 @click.option("-o", "--output", default=None, help="Save results as JSON")
-def logsearch(host, pattern, username, password, since, paths, journal_only, files_only, limit, output):
+def logsearch(
+    host, pattern, username, password, since, paths, journal_only, files_only, limit, output
+):
     """Search remote logs on HOST for PATTERN."""
-    from .logsearch import search_journal, search_files, search_all, print_search_results
+    from .logsearch import print_search_results, search_all, search_files, search_journal
     from .report import to_json
 
     host, username, password = resolve_host(host, username, password)
@@ -1057,7 +1284,9 @@ def logsearch(host, pattern, username, password, since, paths, journal_only, fil
     elif files_only:
         results = search_files(host, username, password, pattern, paths=path_list, limit=limit)
     else:
-        results = search_all(host, username, password, pattern, since=since, paths=path_list, limit=limit)
+        results = search_all(
+            host, username, password, pattern, since=since, paths=path_list, limit=limit
+        )
 
     print_search_results(host, pattern, results)
     if output:

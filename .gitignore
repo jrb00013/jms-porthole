@@ -9,6 +9,11 @@ build/
 venv/
 env/
 .env
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.ruff_cache/
 *.pem
 *.key
 hosts.txt

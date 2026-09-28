@@ -1,9 +1,11 @@
 """
 TLS certificate expiry checking.
 """
+
 import socket
 import ssl
 from datetime import datetime, timezone
+
 from rich.console import Console
 from rich.table import Table
 
@@ -22,7 +24,9 @@ def check_cert(host: str, port: int = 443, timeout: float = 5.0) -> dict:
                 result["san"] = [v for _, v in cert.get("subjectAltName", ())]
                 not_after = cert.get("notAfter")
                 if not_after:
-                    expiry = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+                    expiry = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z").replace(
+                        tzinfo=timezone.utc
+                    )
                     now = datetime.now(timezone.utc)
                     days_left = (expiry - now).days
                     result["expires"] = expiry.isoformat()
@@ -62,7 +66,7 @@ def print_cert_results(host: str, results: list[dict]):
         days = r.get("days_left")
         if days is None:
             days_str = "—"
-            status = f"[red]ERR[/red]"
+            status = "[red]ERR[/red]"
         elif days < 0:
             days_str = str(days)
             status = "[bold red]EXPIRED[/bold red]"

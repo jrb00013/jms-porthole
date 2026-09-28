@@ -1,27 +1,48 @@
-import socket
 import ipaddress
+import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from rich.console import Console
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 console = Console()
 
 COMMON_PORTS = {
-    21: "FTP", 22: "SSH", 23: "Telnet", 25: "SMTP", 53: "DNS",
-    80: "HTTP", 110: "POP3", 143: "IMAP", 443: "HTTPS", 445: "SMB",
-    3306: "MySQL", 3389: "RDP", 5432: "PostgreSQL", 5900: "VNC",
-    5901: "VNC-1", 6379: "Redis", 8080: "HTTP-Alt", 8443: "HTTPS-Alt",
-    27017: "MongoDB", 8888: "Jupyter", 9200: "Elasticsearch", 5601: "Kibana",
-    2375: "Docker", 2376: "Docker-TLS", 9090: "Prometheus", 3000: "Grafana",
+    21: "FTP",
+    22: "SSH",
+    23: "Telnet",
+    25: "SMTP",
+    53: "DNS",
+    80: "HTTP",
+    110: "POP3",
+    143: "IMAP",
+    443: "HTTPS",
+    445: "SMB",
+    3306: "MySQL",
+    3389: "RDP",
+    5432: "PostgreSQL",
+    5900: "VNC",
+    5901: "VNC-1",
+    6379: "Redis",
+    8080: "HTTP-Alt",
+    8443: "HTTPS-Alt",
+    27017: "MongoDB",
+    8888: "Jupyter",
+    9200: "Elasticsearch",
+    5601: "Kibana",
+    2375: "Docker",
+    2376: "Docker-TLS",
+    9090: "Prometheus",
+    3000: "Grafana",
 }
 
 PORT_RANGE_PRESETS = {
-    "web":      [80, 443, 8080, 8443, 8888],
-    "db":       [3306, 5432, 27017, 6379, 9200],
-    "remote":   [22, 23, 3389, 5900, 5901],
-    "devops":   [2375, 2376, 9090, 3000, 5601, 9200],
-    "all":      list(range(1, 1025)),
+    "web": [80, 443, 8080, 8443, 8888],
+    "db": [3306, 5432, 27017, 6379, 9200],
+    "remote": [22, 23, 3389, 5900, 5901],
+    "devops": [2375, 2376, 9090, 3000, 5601, 9200],
+    "all": list(range(1, 1025)),
 }
 
 
@@ -93,7 +114,7 @@ def scan_network(cidr: str, threads: int = 50) -> list[str]:
 
 
 def resolve_port_preset(preset: str) -> list[int]:
-    return PORT_RANGE_PRESETS.get(preset, [])
+    return list(PORT_RANGE_PRESETS.get(preset, []))
 
 
 def print_scan_results(host: str, open_ports: dict[int, str]):

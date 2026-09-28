@@ -4,6 +4,7 @@ once, on top of concurrent.futures (the same pattern already proven in
 harvest.py and spray.py), exposed as a reusable helper for other commands
 (health, procs, netmap, scan, spray).
 """
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, TypeVar

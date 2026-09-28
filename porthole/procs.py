@@ -1,15 +1,16 @@
 """
 Remote process and service management.
 """
+
 from rich.console import Console
 from rich.table import Table
+
 from .ssh import SSHClient
 
 console = Console()
 
 
-def list_services(host: str, username: str, password: str,
-                  filter_state: str = None) -> list[dict]:
+def list_services(host: str, username: str, password: str, filter_state: str = None) -> list[dict]:
     with SSHClient(host, username, password) as ssh:
         raw = ssh.run_out(
             "systemctl list-units --type=service --no-pager --no-legend 2>/dev/null "
@@ -28,8 +29,9 @@ def list_services(host: str, username: str, password: str,
     return services
 
 
-def list_processes(host: str, username: str, password: str,
-                   sort_by: str = "cpu", limit: int = 20) -> list[dict]:
+def list_processes(
+    host: str, username: str, password: str, sort_by: str = "cpu", limit: int = 20
+) -> list[dict]:
     sort_col = {"cpu": 3, "mem": 4, "pid": 1}.get(sort_by, 3)
     with SSHClient(host, username, password) as ssh:
         raw = ssh.run_out(
@@ -41,18 +43,21 @@ def list_processes(host: str, username: str, password: str,
     for line in raw.splitlines():
         parts = line.split("|")
         if len(parts) >= 5:
-            procs.append({
-                "user": parts[0],
-                "pid": parts[1],
-                "cpu": parts[2],
-                "mem": parts[3],
-                "command": parts[4],
-            })
+            procs.append(
+                {
+                    "user": parts[0],
+                    "pid": parts[1],
+                    "cpu": parts[2],
+                    "mem": parts[3],
+                    "command": parts[4],
+                }
+            )
     return procs
 
 
-def service_action(host: str, username: str, password: str,
-                   service: str, action: str) -> tuple[bool, str]:
+def service_action(
+    host: str, username: str, password: str, service: str, action: str
+) -> tuple[bool, str]:
     allowed = {"start", "stop", "restart", "status", "enable", "disable"}
     if action not in allowed:
         raise ValueError(f"Unknown action: {action}")
@@ -65,8 +70,9 @@ def service_action(host: str, username: str, password: str,
     return ok, msg
 
 
-def kill_process(host: str, username: str, password: str,
-                 pid: int, signal: str = "TERM") -> tuple[bool, str]:
+def kill_process(
+    host: str, username: str, password: str, pid: int, signal: str = "TERM"
+) -> tuple[bool, str]:
     with SSHClient(host, username, password) as ssh:
         out, err, code = ssh.run(f"kill -{signal} {pid}")
     return code == 0, out or err

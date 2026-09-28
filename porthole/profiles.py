@@ -7,6 +7,7 @@ Distinct from porthole/config.py's single-host aliases: a profile describes
 a *group* of hosts sharing settings (e.g. "prod-web": hosts=[...],
 default ports=[80,443], username=deploy, jump_host=bastion.example.com).
 """
+
 from pathlib import Path
 from typing import Optional
 
@@ -31,9 +32,14 @@ def _profile_path(name: str) -> Path:
     return PROFILES_DIR / f"{name}.yaml"
 
 
-def save_profile(name: str, hosts: list[str], username: str = None,
-                  ports: list[int] = None, timeout: int = 10,
-                  jump_host: str = None) -> Path:
+def save_profile(
+    name: str,
+    hosts: list[str],
+    username: str = None,
+    ports: list[int] = None,
+    timeout: int = 10,
+    jump_host: str = None,
+) -> Path:
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
     data = {
         "hosts": hosts,

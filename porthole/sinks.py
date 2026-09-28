@@ -4,18 +4,20 @@ destinations: a generic webhook, Slack (via its incoming-webhook payload
 shape), or email (SMTP). Each sink implements the same `Sink` interface so
 `alert.py` can hold a list of configured sinks and notify() all of them.
 """
+
 import json
 import smtplib
-import urllib.request
 import urllib.error
+import urllib.request
 from datetime import datetime
 from email.mime.text import MIMEText
 from typing import Protocol
 
 
 class Sink(Protocol):
-    def notify(self, host: str, failures: list[dict]) -> bool:
-        ...  # pragma: no cover - structural typing only
+    def notify(
+        self, host: str, failures: list[dict]
+    ) -> bool: ...  # pragma: no cover - structural typing only
 
 
 def _generic_payload(host: str, failures: list[dict]) -> dict:
@@ -65,9 +67,17 @@ class EmailSink:
 
     name = "email"
 
-    def __init__(self, smtp_host: str, from_addr: str, to_addr: str,
-                 smtp_port: int = 587, username: str = None, password: str = None,
-                 use_tls: bool = True, timeout: float = 10.0):
+    def __init__(
+        self,
+        smtp_host: str,
+        from_addr: str,
+        to_addr: str,
+        smtp_port: int = 587,
+        username: str = None,
+        password: str = None,
+        use_tls: bool = True,
+        timeout: float = 10.0,
+    ):
         self.smtp_host = smtp_host
         self.smtp_port = smtp_port
         self.from_addr = from_addr
@@ -104,7 +114,10 @@ class EmailSink:
 def _post_json(url: str, payload: dict, timeout: float) -> bool:
     data = json.dumps(payload).encode()
     req = urllib.request.Request(
-        url, data=data, headers={"Content-Type": "application/json"}, method="POST",
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

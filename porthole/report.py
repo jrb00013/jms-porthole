@@ -1,11 +1,15 @@
 """
 Report generation — export scan/harvest/sysinfo results to JSON, CSV, or Markdown.
 """
-import json
+
+from __future__ import annotations
+
 import csv
 import io
+import json
 from datetime import datetime
 from pathlib import Path
+
 from rich.console import Console
 
 console = Console()

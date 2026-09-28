@@ -1,10 +1,11 @@
 import time
+
+from rich.columns import Columns
 from rich.console import Console
-from rich.table import Table
 from rich.live import Live
 from rich.panel import Panel
-from rich.columns import Columns
-from rich.text import Text
+from rich.table import Table
+
 from .ssh import SSHClient
 
 console = Console()
@@ -103,9 +104,9 @@ def build_display(host: str, stats: dict) -> Panel:
             proc_table.add_row(proc[0], proc[1], proc[2], proc[3])
 
     return Panel(
-        Columns([cpu_panel, disk_panel, net_panel]) if False else
-        f"{cpu_panel.renderable}\n\n"
-        + str(proc_table),
+        Columns([cpu_panel, disk_panel, net_panel])
+        if False
+        else f"{cpu_panel.renderable}\n\n" + str(proc_table),
         title=f"[bold]📡 porthole monitor — {host}[/bold]",
         border_style="bright_cyan",
     )
@@ -120,15 +121,26 @@ def run_monitor(host: str, username: str, password: str, interval: int = 3):
                 try:
                     stats = get_system_stats(ssh)
                     cpu_pct = stats["cpu"]
-                    mem_pct = (stats["mem_used"] / stats["mem_total"] * 100) if stats["mem_total"] else 0
+                    mem_pct = (
+                        (stats["mem_used"] / stats["mem_total"] * 100) if stats["mem_total"] else 0
+                    )
 
-                    table = Table(title=f"[bold]📡 porthole monitor — {host}[/bold]", border_style="cyan", expand=True)
+                    table = Table(
+                        title=f"[bold]📡 porthole monitor — {host}[/bold]",
+                        border_style="cyan",
+                        expand=True,
+                    )
                     table.add_column("Metric", style="bold cyan", width=12)
                     table.add_column("Value")
 
                     table.add_row("CPU", bar(cpu_pct))
-                    table.add_row("Memory", f"{bar(mem_pct)} ({stats['mem_used']}M / {stats['mem_total']}M)")
-                    table.add_row("Disk", f"{stats['disk_used']} / {stats['disk_total']} ({stats['disk_pct']})")
+                    table.add_row(
+                        "Memory", f"{bar(mem_pct)} ({stats['mem_used']}M / {stats['mem_total']}M)"
+                    )
+                    table.add_row(
+                        "Disk",
+                        f"{stats['disk_used']} / {stats['disk_total']} ({stats['disk_pct']})",
+                    )
                     table.add_row("Load", stats["load"])
                     table.add_row("Uptime", stats["uptime"])
                     table.add_row("Net conns", stats["connections"])
@@ -144,6 +156,7 @@ def run_monitor(host: str, username: str, password: str, interval: int = 3):
                             proc_table.add_row(proc[0], proc[1], proc[2], proc[3])
 
                     from rich.console import Group
+
                     live.update(Group(table, proc_table))
                     time.sleep(interval)
                 except KeyboardInterrupt:

@@ -1,5 +1,4 @@
 """Unit tests for porthole.fleet — parallel host execution helper."""
-import pytest
 
 from porthole import fleet
 

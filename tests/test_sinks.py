@@ -1,5 +1,6 @@
 """Unit tests for porthole.sinks — webhook/Slack/email alert fan-out."""
-from unittest.mock import patch, MagicMock
+
+from unittest.mock import MagicMock, patch
 
 from porthole import sinks
 
@@ -26,8 +27,9 @@ def test_email_sink_sends_via_smtp():
     mock_server = MagicMock()
     mock_server.__enter__.return_value = mock_server
     with patch("smtplib.SMTP", return_value=mock_server):
-        sink = sinks.EmailSink("smtp.example.com", "from@example.com", "to@example.com",
-                                username="u", password="p")
+        sink = sinks.EmailSink(
+            "smtp.example.com", "from@example.com", "to@example.com", username="u", password="p"
+        )
         result = sink.notify("host1", [{"name": "tcp:22", "error": "down"}])
 
     assert result is True
@@ -58,5 +60,6 @@ def test_notify_all_fans_out_to_every_sink():
 
 def test_post_json_returns_false_on_url_error():
     import urllib.error
+
     with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("no route")):
         assert sinks._post_json("https://example.com", {"a": 1}, 5.0) is False

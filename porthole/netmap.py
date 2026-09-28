@@ -1,10 +1,12 @@
 """
 Network mapping — ARP scan for local subnet, traceroute, and reverse DNS.
 """
+
+import ipaddress
 import socket
 import subprocess
-import ipaddress
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from rich.console import Console
 from rich.table import Table
 
@@ -25,8 +27,7 @@ def ping_icmp(host: str) -> bool:
     """Use system ping to check if host is alive."""
     try:
         result = subprocess.run(
-            ["ping", "-c", "1", "-W", "1", host],
-            capture_output=True, timeout=3
+            ["ping", "-c", "1", "-W", "1", host], capture_output=True, timeout=3
         )
         return result.returncode == 0
     except Exception:

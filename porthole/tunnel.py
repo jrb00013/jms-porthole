@@ -1,9 +1,10 @@
-import threading
-import socket
 import select
+import socket
+import threading
 import time
+
 from rich.console import Console
-from rich.table import Table
+
 from .ssh import SSHClient
 
 console = Console()
@@ -14,7 +15,7 @@ def _forward_tunnel(local_port: int, remote_host: str, remote_port: int, transpo
         sock = socket.socket()
         try:
             sock.connect((remote_host, remote_port))
-        except Exception as e:
+        except Exception:
             chan.close()
             return
         while True:
@@ -41,10 +42,13 @@ def _forward_tunnel(local_port: int, remote_host: str, remote_port: int, transpo
         t.start()
 
 
-def open_tunnel(host: str, username: str, password: str,
-                local_port: int, remote_host: str, remote_port: int):
+def open_tunnel(
+    host: str, username: str, password: str, local_port: int, remote_host: str, remote_port: int
+):
     """Open a local port forward: localhost:local_port -> remote_host:remote_port via host."""
-    console.print(f"[cyan]Opening tunnel: localhost:{local_port} → {remote_host}:{remote_port} via {host}[/cyan]")
+    console.print(
+        f"[cyan]Opening tunnel: localhost:{local_port} → {remote_host}:{remote_port} via {host}[/cyan]"
+    )
 
     client = SSHClient(host, username, password).connect()
     transport = client._client.get_transport()
@@ -54,7 +58,9 @@ def open_tunnel(host: str, username: str, password: str,
     server.bind(("127.0.0.1", local_port))
     server.listen(5)
 
-    console.print(f"[green]Tunnel open. Connect to localhost:{local_port}. Ctrl+C to close.[/green]")
+    console.print(
+        f"[green]Tunnel open. Connect to localhost:{local_port}. Ctrl+C to close.[/green]"
+    )
 
     def accept_loop():
         while True:

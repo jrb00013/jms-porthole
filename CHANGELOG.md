@@ -4,7 +4,33 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions prior to
 this document are reconstructed from git history.
 
-## [Unreleased]
+## [0.3.0] — 2026-09-28
+
+### Fixed
+- Invalid `setuptools` build backend (`setuptools.backends.legacy:build` →
+  `setuptools.build_meta`) that broke every `pip install` and red-failed CI
+  on `main`.
+- `jms --version` now reports the package version from `porthole.core`
+  (was hard-coded `0.1.0`).
+- `resolve_port_preset()` returns a copy so callers cannot mutate shared
+  preset lists.
+- Alert loop renders `ERR` (not `None`) when an HTTP check has no status.
+
+### Added
+- Expanded pytest suite (~935 tests, ≥70% coverage floor) covering alert,
+  cert, creds, diff, harvest, monitor, probe, procs, report, secrets, ssh,
+  sysinfo, tunnel, vuln, watcher, and CLI smoke (`--help` for every command).
+- CI: ruff lint + format check, multi-Python matrix with coverage gate,
+  wheel build + `jms --help` / `jms --version` smoke test; optional PyPI
+  publish on `v*` tags.
+- README documents profiles, `--json`/`--csv`, daemon mode, `diff --history`,
+  keyring, fleet flags, and an authorized-use statement.
+
+### Changed
+- Package version bumped to `0.3.0`.
+- Dev extras now include `pytest-cov`, `ruff`, and `build`.
+
+## [0.2.0]
 
 ### Added
 - `docs/ROADMAP.md` and `docs/IMPLEMENTATION_PLAN.md` describing the
@@ -23,7 +49,8 @@ this document are reconstructed from git history.
   `jms diff HOST --history --kind scan` diffs the current stored run
   against the previous one (`porthole/diff.py:diff_against_history`).
 - **Fleet-wide parallel execution** (`porthole/fleet.py`):
-  `--hosts-file`/`--parallel N` wired into `jms health`.
+  `--hosts-file`/`--parallel N` wired into `jms health`, and later extended
+  to `scan`, `spray`, `netmap`, and `procs ps`.
 - **Real vault/keyring integration**: `keyring_store.py` hardened with an
   `is_available()` check; `config.py` now stores/resolves host-alias
   passwords through the OS keyring first, falling back to (explicitly
@@ -41,34 +68,13 @@ this document are reconstructed from git history.
   health monitoring (named `daemon`, not `watch`, since `jms watch` already
   tails a remote file).
 - This `CHANGELOG.md`.
+- GitHub Actions CI workflow running pytest on push/PR.
 
 ### Changed
 - `porthole/alert.py`'s payload-building was refactored into
   `porthole/sinks.py`; `run_alert_loop` now takes a list of sinks instead
   of a single hardcoded webhook/Slack branch (backward compatible via the
   `webhook`/`slack` convenience arguments).
-
-## [0.2.0]
-- `chore`: bump version and document new commands in README.
-- `feat(cli)`: add `alert` and `logsearch` commands.
-- `feat(dns)`: add `lookup`/`enum`/`reverse` subcommands.
-- `feat(cli)`: add `procs` service-management commands.
-- `feat(cli)`: add `backup` command.
-- `feat(cli)`: add `keydeploy` command.
-- `feat(cli)`: add `cert` expiry command.
-- `feat(cli)`: add `vuln` security-posture command.
-- `feat(cli)`: add `secrets` scanning command.
-- `feat(cli)`: wire `health` and `diff` commands.
-- `feat(health)`: add check-spec parser shared by `health` and `alert`.
-- `feat(logsearch)`: search remote journalctl and log files via SSH.
-- `feat(alert)`: periodic health monitoring with webhook notifications.
-- `feat(dns)`: DNS record lookup and subdomain enumeration.
-- `feat(procs)`: remote systemd service and process management.
-- `feat(backup)`: tarball remote directories and download with progress.
-- `feat(keydeploy)`: deploy SSH public keys to remote `authorized_keys`.
-- `feat(cert)`: TLS certificate expiry checking with days-remaining warnings.
-- `feat(vuln)`: security posture checks for SSH, packages, and permissions.
-- `feat(secrets)`: remote secret scanning for API keys and credentials.
 
 ## [0.1.0]
 - `docs`: add MIT license, rewrite README with full command reference and examples.

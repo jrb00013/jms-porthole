@@ -1,9 +1,11 @@
 """
 Remote health checks — verify services are responding correctly.
 """
+
+import http.client
 import socket
 import time
-import http.client
+
 from rich.console import Console
 from rich.table import Table
 
@@ -18,6 +20,7 @@ def check_http(host: str, port: int = 80, path: str = "/", https: bool = False) 
         start = time.monotonic()
         if https:
             import ssl
+
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
@@ -82,6 +85,8 @@ def print_health_results(host: str, results: list[dict]):
         table.add_row(r["name"], status_str, latency, detail)
 
     console.print(table)
+
+
 def parse_check_specs(specs: tuple[str, ...]) -> list[dict]:
     """Parse check specs like 'tcp:22', 'http:80/', 'https:443/api'."""
     checks = []
@@ -96,17 +101,21 @@ def parse_check_specs(specs: tuple[str, ...]) -> list[dict]:
             port_path = rest.split("/", 1)
             port = int(port_path[0])
             path = "/" + port_path[1] if len(port_path) > 1 else "/"
-            checks.append({
-                "type": "http",
-                "port": port,
-                "path": path,
-                "https": ctype == "https",
-                "name": spec,
-            })
+            checks.append(
+                {
+                    "type": "http",
+                    "port": port,
+                    "path": path,
+                    "https": ctype == "https",
+                    "name": spec,
+                }
+            )
         else:
-            checks.append({
-                "type": "tcp",
-                "port": int(rest),
-                "name": spec,
-            })
+            checks.append(
+                {
+                    "type": "tcp",
+                    "port": int(rest),
+                    "name": spec,
+                }
+            )
     return checks

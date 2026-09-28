@@ -1,4 +1,5 @@
 """Unit tests for porthole.spray — credential combo generation and hit persistence."""
+
 from unittest.mock import patch
 
 from porthole import spray

@@ -1,9 +1,11 @@
+import select
+import socket
 import sys
 import termios
 import tty
-import select
-import socket
+
 from rich.console import Console
+
 from .ssh import SSHClient
 
 console = Console()
@@ -48,6 +50,7 @@ def interactive_shell(host: str, username: str, password: str):
 def run_command_on_hosts(hosts: list[str], username: str, password: str, command: str):
     """Run a single command on multiple hosts and print results."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from rich.table import Table
 
     def run_on(host):

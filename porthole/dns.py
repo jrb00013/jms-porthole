@@ -1,18 +1,40 @@
 """
 DNS enumeration — record lookups and subdomain discovery.
 """
+
+import shutil
 import socket
 import subprocess
-import shutil
+
 from rich.console import Console
 from rich.table import Table
 
 console = Console()
 
 COMMON_SUBDOMAINS = [
-    "www", "mail", "ftp", "admin", "api", "dev", "staging", "test",
-    "vpn", "ns1", "ns2", "mx", "smtp", "webmail", "portal", "cdn",
-    "blog", "shop", "app", "dashboard", "git", "jenkins", "grafana",
+    "www",
+    "mail",
+    "ftp",
+    "admin",
+    "api",
+    "dev",
+    "staging",
+    "test",
+    "vpn",
+    "ns1",
+    "ns2",
+    "mx",
+    "smtp",
+    "webmail",
+    "portal",
+    "cdn",
+    "blog",
+    "shop",
+    "app",
+    "dashboard",
+    "git",
+    "jenkins",
+    "grafana",
 ]
 
 
@@ -21,7 +43,9 @@ def _dig(domain: str, rtype: str = "ANY") -> str:
         try:
             result = subprocess.run(
                 ["dig", "+short", domain, rtype],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             return result.stdout.strip()
         except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -30,7 +54,9 @@ def _dig(domain: str, rtype: str = "ANY") -> str:
         try:
             result = subprocess.run(
                 ["host", "-t", rtype, domain],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             return result.stdout.strip()
         except (subprocess.TimeoutExpired, FileNotFoundError):
