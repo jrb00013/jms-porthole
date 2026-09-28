@@ -15,7 +15,11 @@ from pathlib import Path
 
 import click
 import pytest
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11
+    import tomli as tomllib
 from click.testing import CliRunner
 
 from porthole import config

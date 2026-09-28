@@ -10,6 +10,8 @@ caller fall back to storing a password in plaintext in
 loudly (see config.py) rather than happen silently.
 """
 
+from __future__ import annotations
+
 from rich.console import Console
 
 console = Console()

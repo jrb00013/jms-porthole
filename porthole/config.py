@@ -3,6 +3,8 @@ Config file support: ~/.config/jms/hosts.json
 Lets you save hosts with credentials so you don't retype them.
 """
 
+from __future__ import annotations
+
 import json
 import os
 from pathlib import Path

@@ -2,6 +2,8 @@
 Report generation — export scan/harvest/sysinfo results to JSON, CSV, or Markdown.
 """
 
+from __future__ import annotations
+
 import csv
 import io
 import json
