@@ -1,4 +1,5 @@
 # JMS Porthole
+<img width="1408" height="768" alt="Gemini_Generated_Image_lp6swklp6swklp6s" src="https://github.com/user-attachments/assets/825ff454-ff02-4230-a63b-d804d023259d" />
 
 **Janus Monitoring Suite** — a Python CLI toolkit for remote monitoring, desktop broadcasting, and network recon.
 
