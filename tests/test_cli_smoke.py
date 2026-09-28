@@ -102,8 +102,9 @@ def test_top_level_short_help_flag_works_because_help_option_names_configured():
 def test_no_args_prints_help_and_exits_with_usage_error_code():
     result = CliRunner().invoke(main, [])
 
-    # Click's no_args_is_help on a Group prints help and exits 2 (a usage error).
-    assert result.exit_code == 2
+    # Click's no_args_is_help on a Group prints help. Exit code is 2 on modern
+    # Click (usage error) and 0 on some older Click builds still pulled on 3.9.
+    assert result.exit_code in (0, 2)
     assert "Usage:" in result.output
     assert "COMMAND [ARGS]" in result.output
 
