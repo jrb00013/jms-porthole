@@ -3,6 +3,7 @@ Human-friendly duration parsing for scheduled/daemon-style commands
 (`jms watch HOST --interval 5m`), reused wherever a command wants to accept
 "5m", "1h", "30s", "90" (bare seconds) rather than requiring raw seconds.
 """
+
 import re
 
 _UNIT_SECONDS = {

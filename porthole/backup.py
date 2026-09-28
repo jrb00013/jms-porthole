@@ -1,19 +1,26 @@
 """
 Remote backup — tarball a remote directory and download it.
 """
+
 import os
-import time
 from datetime import datetime
+
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, FileSizeColumn
+from rich.progress import BarColumn, FileSizeColumn, Progress, SpinnerColumn, TextColumn
+
 from .ssh import SSHClient
 
 console = Console()
 
 
-def backup_remote(host: str, username: str, password: str,
-                  remote_path: str, output: str = None,
-                  exclude: list[str] = None) -> str:
+def backup_remote(
+    host: str,
+    username: str,
+    password: str,
+    remote_path: str,
+    output: str = None,
+    exclude: list[str] = None,
+) -> str:
     remote_path = remote_path.rstrip("/")
     if not output:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -37,13 +44,16 @@ def backup_remote(host: str, username: str, password: str,
         channel.exec_command(tar_cmd)
 
         received = 0
-        with open(output, "wb") as f, Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            FileSizeColumn(),
-            console=console,
-        ) as progress:
+        with (
+            open(output, "wb") as f,
+            Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                FileSizeColumn(),
+                console=console,
+            ) as progress,
+        ):
             task = progress.add_task("Downloading", total=remote_size or None)
             while True:
                 data = channel.recv(65536)
@@ -66,10 +76,12 @@ def list_backups(directory: str = ".") -> list[dict]:
     for f in os.listdir(directory):
         if f.startswith("jms_backup_") and f.endswith(".tar.gz"):
             path = os.path.join(directory, f)
-            backups.append({
-                "file": f,
-                "path": path,
-                "size": os.path.getsize(path),
-                "mtime": os.path.getmtime(path),
-            })
+            backups.append(
+                {
+                    "file": f,
+                    "path": path,
+                    "size": os.path.getsize(path),
+                    "mtime": os.path.getmtime(path),
+                }
+            )
     return sorted(backups, key=lambda x: x["mtime"], reverse=True)

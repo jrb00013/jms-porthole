@@ -1,6 +1,7 @@
 """Unit tests for porthole.alert — sink construction (no real network/loops)."""
+
 from porthole import alert
-from porthole.sinks import WebhookSink, SlackSink
+from porthole.sinks import SlackSink, WebhookSink
 
 
 def test_build_sinks_empty_when_nothing_configured():
@@ -20,7 +21,9 @@ def test_build_sinks_slack_flag_uses_slack_sink():
 
 
 def test_build_sinks_extra_webhooks_are_appended():
-    result = alert.build_sinks(webhook="https://a.com", extra_webhooks=["https://b.com", "https://c.com"])
+    result = alert.build_sinks(
+        webhook="https://a.com", extra_webhooks=["https://b.com", "https://c.com"]
+    )
     assert len(result) == 3
     assert all(isinstance(s, WebhookSink) for s in result)
 
@@ -28,6 +31,7 @@ def test_build_sinks_extra_webhooks_are_appended():
 def test_build_sinks_includes_prebuilt_sinks():
     class FakeSink:
         name = "fake"
+
         def notify(self, host, failures):
             return True
 

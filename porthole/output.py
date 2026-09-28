@@ -13,25 +13,38 @@ Usage in cli.py:
 (instead of / in addition to the normal Rich table), and always writes to
 --output/-o if given.
 """
+
 import json as _json
+
 import click
 
-from .report import to_json, to_csv
+from .report import to_csv, to_json
 
 
 def output_options(f):
     """Click decorator adding --json/--csv/-o to a command."""
-    f = click.option("--json", "json_out", is_flag=True, default=False,
-                      help="Print results as JSON to stdout")(f)
-    f = click.option("--csv", "csv_out", is_flag=True, default=False,
-                      help="Print results as CSV to stdout (list-shaped data only)")(f)
-    f = click.option("-o", "--output", default=None,
-                      help="Save results to this path (format inferred from --json/--csv, default JSON)")(f)
+    f = click.option(
+        "--json", "json_out", is_flag=True, default=False, help="Print results as JSON to stdout"
+    )(f)
+    f = click.option(
+        "--csv",
+        "csv_out",
+        is_flag=True,
+        default=False,
+        help="Print results as CSV to stdout (list-shaped data only)",
+    )(f)
+    f = click.option(
+        "-o",
+        "--output",
+        default=None,
+        help="Save results to this path (format inferred from --json/--csv, default JSON)",
+    )(f)
     return f
 
 
-def emit(data, json_out: bool = False, csv_out: bool = False, output: str = None,
-          rows: list[dict] = None) -> bool:
+def emit(
+    data, json_out: bool = False, csv_out: bool = False, output: str = None, rows: list[dict] = None
+) -> bool:
     """
     Emit `data` (or `rows` for CSV) per the requested format(s).
 

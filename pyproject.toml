@@ -1,10 +1,10 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "jms-porthole"
-version = "0.2.0"
+version = "0.3.0"
 description = "JMS (Janus Monitoring Suite) — remote monitoring, broadcasting, and recon toolkit"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -12,6 +12,10 @@ requires-python = ">=3.9"
 keywords = ["ssh", "vnc", "monitoring", "recon", "network", "security"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Topic :: System :: Monitoring",
@@ -29,11 +33,19 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+    "build>=1.0",
 ]
 
 [project.scripts]
 porthole = "porthole.cli:main"
 jms = "porthole.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/jrb00013/jms-porthole"
+Changelog = "https://github.com/jrb00013/jms-porthole/blob/main/CHANGELOG.md"
+Issues = "https://github.com/jrb00013/jms-porthole/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -41,3 +53,40 @@ include = ["porthole*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=porthole --cov-report=term-missing:skip-covered"
+
+[tool.coverage.run]
+branch = false
+omit = [
+    "porthole/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+exclude = [".venv", "build", "dist", ".git"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "C4"]
+ignore = [
+    "E501",
+    "B008",
+    "B904",
+    "C408",
+    "C416",
+    "E741",
+    "UP006",
+    "UP007",
+    "UP035",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]

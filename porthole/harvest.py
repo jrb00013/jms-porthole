@@ -1,15 +1,26 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from rich.console import Console
-from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
+
 from .ssh import SSHClient, test_connection
 
 console = Console()
 
 
 def probe_host(host: str, username: str, password: str) -> dict:
-    result = {"host": host, "status": "unreachable", "os": "", "kernel": "",
-              "cpu": "", "ram": "", "uptime": "", "users": "", "open_ports": ""}
+    result = {
+        "host": host,
+        "status": "unreachable",
+        "os": "",
+        "kernel": "",
+        "cpu": "",
+        "ram": "",
+        "uptime": "",
+        "users": "",
+        "open_ports": "",
+    }
 
     if not test_connection(host):
         return result
@@ -29,8 +40,8 @@ def probe_host(host: str, username: str, password: str) -> dict:
             result["open_ports"] = ssh.run_out(
                 "ss -tlnp | awk 'NR>1{print $4}' | grep -oP ':\\K\\d+' | sort -n | tr '\\n' ',' | sed 's/,$//'"
             )
-    except Exception as e:
-        result["status"] = f"auth failed"
+    except Exception:
+        result["status"] = "auth failed"
 
     return result
 
@@ -38,7 +49,9 @@ def probe_host(host: str, username: str, password: str) -> dict:
 def harvest(hosts: list[str], username: str, password: str, threads: int = 10) -> list[dict]:
     results = []
 
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+    with Progress(
+        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
+    ) as progress:
         task = progress.add_task(f"Harvesting {len(hosts)} host(s)...", total=len(hosts))
         with ThreadPoolExecutor(max_workers=threads) as ex:
             futures = {ex.submit(probe_host, h, username, password): h for h in hosts}
@@ -61,7 +74,13 @@ def print_harvest_results(results: list[dict]):
     table.add_column("Open Ports")
 
     for r in results:
-        status_color = "green" if r["status"] == "online" else "red" if r["status"] == "unreachable" else "yellow"
+        status_color = (
+            "green"
+            if r["status"] == "online"
+            else "red"
+            if r["status"] == "unreachable"
+            else "yellow"
+        )
         table.add_row(
             r["host"],
             f"[{status_color}]{r['status']}[/{status_color}]",

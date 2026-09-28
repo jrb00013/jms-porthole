@@ -1,4 +1,5 @@
 """Unit tests for porthole.output — shared --json/--csv/-o emission."""
+
 import json
 
 from porthole import output

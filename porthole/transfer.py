@@ -1,10 +1,19 @@
 """
 File transfer — upload/download files to/from remote hosts via SFTP.
 """
+
 import os
-from pathlib import Path
+
 from rich.console import Console
-from rich.progress import Progress, BarColumn, TextColumn, FileSizeColumn, TransferSpeedColumn, TimeRemainingColumn
+from rich.progress import (
+    BarColumn,
+    FileSizeColumn,
+    Progress,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
+
 from .ssh import SSHClient
 
 console = Console()
@@ -49,7 +58,9 @@ def download_file(host: str, username: str, password: str, remote_path: str, loc
         file_size = stat.st_size or 0
 
         with _make_progress() as progress:
-            task = progress.add_task(f"Downloading {os.path.basename(remote_path)}", total=file_size)
+            task = progress.add_task(
+                f"Downloading {os.path.basename(remote_path)}", total=file_size
+            )
 
             def callback(transferred, total):
                 progress.update(task, completed=transferred)
@@ -61,9 +72,10 @@ def download_file(host: str, username: str, password: str, remote_path: str, loc
 
 
 def list_remote_dir(host: str, username: str, password: str, remote_path: str = "."):
-    from rich.table import Table
     import stat as stat_mod
     from datetime import datetime
+
+    from rich.table import Table
 
     with SSHClient(host, username, password) as ssh:
         sftp = ssh.get_sftp()

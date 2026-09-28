@@ -1,13 +1,20 @@
-import paramiko
 import socket
 import time
-from contextlib import contextmanager
 from typing import Optional
+
+import paramiko
 
 
 class SSHClient:
-    def __init__(self, host: str, username: str, password: str = None,
-                 key_path: str = None, port: int = 22, timeout: int = 10):
+    def __init__(
+        self,
+        host: str,
+        username: str,
+        password: str = None,
+        key_path: str = None,
+        port: int = 22,
+        timeout: int = 10,
+    ):
         self.host = host
         self.username = username
         self.password = password

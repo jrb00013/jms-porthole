@@ -1,15 +1,19 @@
 """
 Deploy SSH public keys to remote authorized_keys.
 """
+
 import os
+
 from rich.console import Console
+
 from .ssh import SSHClient
 
 console = Console()
 
 
-def deploy_key(host: str, username: str, password: str,
-               pubkey_path: str, comment: str = None) -> bool:
+def deploy_key(
+    host: str, username: str, password: str, pubkey_path: str, comment: str = None
+) -> bool:
     pubkey_path = os.path.expanduser(pubkey_path)
     if not os.path.isfile(pubkey_path):
         raise FileNotFoundError(f"Public key not found: {pubkey_path}")

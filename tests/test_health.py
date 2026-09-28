@@ -1,5 +1,6 @@
 """Unit tests for porthole.health — parsing and check logic, no real network."""
-from unittest.mock import patch, MagicMock
+
+from unittest.mock import MagicMock, patch
 
 from porthole import health
 
@@ -12,7 +13,11 @@ def test_parse_tcp_spec():
 def test_parse_http_spec_default_path():
     checks = health.parse_check_specs(("http:80",))
     assert checks[0] == {
-        "type": "http", "port": 80, "path": "/", "https": False, "name": "http:80",
+        "type": "http",
+        "port": 80,
+        "path": "/",
+        "https": False,
+        "name": "http:80",
     }
 
 
@@ -80,8 +85,16 @@ def test_check_http_connection_error_reports_body():
 
 def test_run_health_checks_dispatches_by_type():
     checks = [{"type": "tcp", "port": 22}, {"type": "http", "port": 80, "path": "/"}]
-    with patch.object(health, "check_tcp", return_value={"port": 22, "open": True, "latency_ms": 1.0}) as tcp_mock, \
-         patch.object(health, "check_http", return_value={"port": 80, "status": 200, "latency_ms": 2.0, "snippet": ""}) as http_mock:
+    with (
+        patch.object(
+            health, "check_tcp", return_value={"port": 22, "open": True, "latency_ms": 1.0}
+        ) as tcp_mock,
+        patch.object(
+            health,
+            "check_http",
+            return_value={"port": 80, "status": 200, "latency_ms": 2.0, "snippet": ""},
+        ) as http_mock,
+    ):
         results = health.run_health_checks("host", checks)
 
     tcp_mock.assert_called_once()

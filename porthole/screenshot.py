@@ -1,8 +1,9 @@
 import os
-import tempfile
 import time
 from datetime import datetime
+
 from rich.console import Console
+
 from .ssh import SSHClient
 
 console = Console()
@@ -24,7 +25,9 @@ def capture_screenshot(host: str, username: str, password: str, output_path: str
         display_socket = ssh.run_out("ls /tmp/.X11-unix/ | head -1")
         display = ":" + display_socket.lstrip("X") if display_socket else ":0"
 
-        xauth = ssh.run_out("ls /run/user/*/gdm/Xauthority 2>/dev/null | head -1 || echo $HOME/.Xauthority")
+        xauth = ssh.run_out(
+            "ls /run/user/*/gdm/Xauthority 2>/dev/null | head -1 || echo $HOME/.Xauthority"
+        )
 
         # Try scrot first, then import (ImageMagick), then xwd
         tools = [
@@ -55,7 +58,7 @@ def capture_screenshot(host: str, username: str, password: str, output_path: str
             raise RuntimeError("Could not capture screenshot — no suitable tool available")
 
         # Download via SFTP
-        console.print(f"[cyan]Downloading screenshot...[/cyan]")
+        console.print("[cyan]Downloading screenshot...[/cyan]")
         sftp = ssh.get_sftp()
         sftp.get(remote_tmp, output_path)
         sftp.remove(remote_tmp)

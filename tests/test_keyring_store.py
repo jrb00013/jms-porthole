@@ -1,5 +1,6 @@
 """Unit tests for porthole.keyring_store — uses a fake in-memory backend, never a real OS keyring."""
-from unittest.mock import patch, MagicMock
+
+from unittest.mock import MagicMock, patch
 
 from porthole import keyring_store
 
@@ -29,8 +30,10 @@ def test_is_available_true_with_real_backend():
     fake_backend = MagicMock()
     type(fake_backend).__module__ = "keyring.backends.SecretService"
     type(fake_backend).__name__ = "Keyring"
-    with patch.object(keyring_store, "HAS_KEYRING", True), \
-         patch.object(keyring_store, "_keyring") as mock_kr:
+    with (
+        patch.object(keyring_store, "HAS_KEYRING", True),
+        patch.object(keyring_store, "_keyring") as mock_kr,
+    ):
         mock_kr.get_keyring.return_value = fake_backend
         assert keyring_store.is_available() is True
 
@@ -38,19 +41,24 @@ def test_is_available_true_with_real_backend():
 def test_is_available_false_for_fail_backend():
     class FailKeyring:
         pass
+
     FailKeyring.__module__ = "keyring.backends.fail"
 
-    with patch.object(keyring_store, "HAS_KEYRING", True), \
-         patch.object(keyring_store, "_keyring") as mock_kr:
+    with (
+        patch.object(keyring_store, "HAS_KEYRING", True),
+        patch.object(keyring_store, "_keyring") as mock_kr,
+    ):
         mock_kr.get_keyring.return_value = FailKeyring()
         assert keyring_store.is_available() is False
 
 
 def test_store_and_get_password_round_trip():
     fake = FakeKeyring()
-    with patch.object(keyring_store, "HAS_KEYRING", True), \
-         patch.object(keyring_store, "_keyring", fake), \
-         patch.object(keyring_store, "is_available", return_value=True):
+    with (
+        patch.object(keyring_store, "HAS_KEYRING", True),
+        patch.object(keyring_store, "_keyring", fake),
+        patch.object(keyring_store, "is_available", return_value=True),
+    ):
         assert keyring_store.store_password("myhost", "admin", "s3cret") is True
         assert keyring_store.get_password("myhost", "admin") == "s3cret"
 
@@ -66,8 +74,10 @@ def test_get_password_returns_none_when_unavailable():
 
 
 def test_delete_password_swallows_missing_entry():
-    with patch.object(keyring_store, "HAS_KEYRING", True), \
-         patch.object(keyring_store, "_keyring") as mock_kr:
+    with (
+        patch.object(keyring_store, "HAS_KEYRING", True),
+        patch.object(keyring_store, "_keyring") as mock_kr,
+    ):
         mock_kr.delete_password.side_effect = Exception("not found")
         assert keyring_store.delete_password("myhost", "admin") is False
 

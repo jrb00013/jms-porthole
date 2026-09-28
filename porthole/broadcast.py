@@ -1,6 +1,8 @@
 import time
+
 from rich.console import Console
 from rich.panel import Panel
+
 from .ssh import SSHClient
 
 console = Console()
@@ -47,9 +49,7 @@ def start_broadcast(host: str, username: str, password: str) -> dict:
             raise RuntimeError(f"x11vnc failed to start:\n{log}")
 
         # Detect port
-        port_out = ssh.run_out(
-            "ss -tlnp 2>/dev/null | grep x11vnc | grep -oP ':\\K\\d+' | head -1"
-        )
+        port_out = ssh.run_out("ss -tlnp 2>/dev/null | grep x11vnc | grep -oP ':\\K\\d+' | head -1")
         port = int(port_out) if port_out.isdigit() else 5901
 
         return {"host": host, "port": port, "display": display, "xauth": xauth}
@@ -65,9 +65,11 @@ def get_broadcast_status(host: str, username: str, password: str) -> dict:
     """Check if a broadcast is currently running on the host."""
     with SSHClient(host, username, password) as ssh:
         pid = ssh.run_out("pgrep -x x11vnc")
-        port_out = ssh.run_out(
-            "ss -tlnp 2>/dev/null | grep x11vnc | grep -oP ':\\K\\d+' | head -1"
-        ) if pid else ""
+        port_out = (
+            ssh.run_out("ss -tlnp 2>/dev/null | grep x11vnc | grep -oP ':\\K\\d+' | head -1")
+            if pid
+            else ""
+        )
         return {
             "running": bool(pid),
             "pid": pid,
@@ -77,15 +79,17 @@ def get_broadcast_status(host: str, username: str, password: str) -> dict:
 
 def print_connection_info(info: dict):
     host, port = info["host"], info["port"]
-    console.print(Panel(
-        f"[bold cyan]Host:[/bold cyan]    {host}\n"
-        f"[bold cyan]Port:[/bold cyan]    {port}\n"
-        f"[bold cyan]Display:[/bold cyan] {info['display']}\n\n"
-        f"[bold green]Connect:[/bold green]\n"
-        f"  vncviewer {host}:{port}\n\n"
-        f"[bold green]SSH tunnel (secure):[/bold green]\n"
-        f"  ssh -L {port}:localhost:{port} <user>@{host}\n"
-        f"  vncviewer localhost:{port}",
-        title="[bold]🖥️  DESKTOP BROADCASTING[/bold]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold cyan]Host:[/bold cyan]    {host}\n"
+            f"[bold cyan]Port:[/bold cyan]    {port}\n"
+            f"[bold cyan]Display:[/bold cyan] {info['display']}\n\n"
+            f"[bold green]Connect:[/bold green]\n"
+            f"  vncviewer {host}:{port}\n\n"
+            f"[bold green]SSH tunnel (secure):[/bold green]\n"
+            f"  ssh -L {port}:localhost:{port} <user>@{host}\n"
+            f"  vncviewer localhost:{port}",
+            title="[bold]🖥️  DESKTOP BROADCASTING[/bold]",
+            border_style="cyan",
+        )
+    )

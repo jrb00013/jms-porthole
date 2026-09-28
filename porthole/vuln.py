@@ -1,23 +1,53 @@
 """
 Remote vulnerability and security posture checks.
 """
+
 from rich.console import Console
 from rich.table import Table
+
 from .ssh import SSHClient
 
 console = Console()
 
 CHECKS = [
-    ("upgradable_packages", "Upgradable packages", "apt list --upgradable 2>/dev/null | grep -c upgradable || yum check-update -q 2>/dev/null | wc -l"),
-    ("root_login", "SSH PermitRootLogin", "grep -i '^PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null || echo 'not found'"),
-    ("password_auth", "SSH PasswordAuthentication", "grep -i '^PasswordAuthentication' /etc/ssh/sshd_config 2>/dev/null || echo 'not found'"),
-    ("empty_passwords", "Empty password accounts", "awk -F: '($2==\"\" || $2==\"!\"){print $1}' /etc/shadow 2>/dev/null | wc -l"),
-    ("world_writable", "World-writable files in /tmp", "find /tmp -maxdepth 2 -type f -perm -002 2>/dev/null | wc -l"),
+    (
+        "upgradable_packages",
+        "Upgradable packages",
+        "apt list --upgradable 2>/dev/null | grep -c upgradable || yum check-update -q 2>/dev/null | wc -l",
+    ),
+    (
+        "root_login",
+        "SSH PermitRootLogin",
+        "grep -i '^PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null || echo 'not found'",
+    ),
+    (
+        "password_auth",
+        "SSH PasswordAuthentication",
+        "grep -i '^PasswordAuthentication' /etc/ssh/sshd_config 2>/dev/null || echo 'not found'",
+    ),
+    (
+        "empty_passwords",
+        "Empty password accounts",
+        'awk -F: \'($2=="" || $2=="!"){print $1}\' /etc/shadow 2>/dev/null | wc -l',
+    ),
+    (
+        "world_writable",
+        "World-writable files in /tmp",
+        "find /tmp -maxdepth 2 -type f -perm -002 2>/dev/null | wc -l",
+    ),
     ("suid_binaries", "SUID binaries", "find / -perm -4000 -type f 2>/dev/null | wc -l"),
     ("listening_ports", "Listening ports", "ss -tlnp 2>/dev/null | tail -n +2 | wc -l"),
-    ("ufw_status", "Firewall status", "ufw status 2>/dev/null | head -1 || iptables -L -n 2>/dev/null | head -3 || echo 'no firewall detected'"),
+    (
+        "ufw_status",
+        "Firewall status",
+        "ufw status 2>/dev/null | head -1 || iptables -L -n 2>/dev/null | head -3 || echo 'no firewall detected'",
+    ),
     ("kernel_version", "Kernel version", "uname -r"),
-    ("last_logins", "Failed login attempts (24h)", "journalctl --since '24 hours ago' -u ssh -u sshd 2>/dev/null | grep -ci 'failed\\|invalid' || lastb 2>/dev/null | wc -l"),
+    (
+        "last_logins",
+        "Failed login attempts (24h)",
+        "journalctl --since '24 hours ago' -u ssh -u sshd 2>/dev/null | grep -ci 'failed\\|invalid' || lastb 2>/dev/null | wc -l",
+    ),
 ]
 
 
@@ -77,12 +107,14 @@ def run_vuln_checks(host: str, username: str, password: str) -> list[dict]:
         for key, label, cmd in CHECKS:
             raw = ssh.run_out(cmd, timeout=60)
             severity, detail = _assess(key, raw)
-            results.append({
-                "check": label,
-                "severity": severity,
-                "detail": detail,
-                "raw": raw[:200],
-            })
+            results.append(
+                {
+                    "check": label,
+                    "severity": severity,
+                    "detail": detail,
+                    "raw": raw[:200],
+                }
+            )
     return results
 
 
@@ -110,4 +142,4 @@ def print_vuln_results(host: str, results: list[dict]):
     if critical:
         console.print(f"\n[red]⚠ {critical} critical/high findings[/red]")
     else:
-        console.print(f"\n[green]No critical/high findings[/green]")
+        console.print("\n[green]No critical/high findings[/green]")

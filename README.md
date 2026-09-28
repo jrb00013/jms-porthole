@@ -14,6 +14,14 @@ Installable as a Python package. All commands available as `jms <command>` or `p
 
 ---
 
+## Authorized use
+
+This toolkit includes credential spraying, secrets scanning, port knocking, and vulnerability checks.
+Use it **only** on systems and networks you own or have explicit written authorization to test.
+Unauthorized access to computer systems is illegal.
+
+---
+
 ## Install
 
 ```bash
@@ -24,7 +32,10 @@ Or manually:
 
 ```bash
 pip install .
+# or, once published: pipx install jms-porthole
 ```
+
+Requires Python 3.9+.
 
 ---
 
@@ -60,9 +71,11 @@ pip install .
 | `jms backup HOST PATH` | Tarball and download a remote directory |
 | `jms procs services/ps/restart/kill` | Remote service and process management |
 | `jms dns lookup/enum/reverse` | DNS record lookup and subdomain enum |
-| `jms alert HOST CHECKS...` | Health monitoring with webhook alerts |
+| `jms alert HOST CHECKS...` | Health monitoring with webhook/email sinks |
+| `jms daemon HOST` | Scheduled health-check loop (`--interval 5m`) |
 | `jms logsearch HOST PATTERN` | Search remote journal and log files |
 | `jms hosts add/list/remove` | Manage saved host aliases |
+| `jms profile add/list/show/remove` | Named host-group profiles |
 
 ---
 
@@ -105,9 +118,13 @@ jms spray 192.168.30.0/24 -u admin,root -p admin,password
 # Port knocking
 jms knock 192.168.30.13 7000 8000 9000
 
-# Save a host alias
+# Save a host alias (password prefers OS keyring)
 jms hosts add heimdall 192.168.30.73 -u heimdall -p ubuntu
 jms broadcast heimdall
+
+# Named host-group profile
+jms profile add prod-web 10.0.0.1 10.0.0.2 -u deploy --ports 80,443
+jms profile list
 
 # Health check + cert expiry
 jms health 192.168.30.13 tcp:22 https:443/
@@ -125,21 +142,37 @@ jms backup 192.168.30.13 /etc/nginx -o nginx-backup.tar.gz
 jms dns enum example.com
 jms logsearch 192.168.30.13 "error" --since "2 hours ago"
 
-# Alert on service failure
-jms alert 192.168.30.13 tcp:80 http:443/ --webhook https://hooks.example.com/alerts --interval 30
+# Alert on service failure (webhook / Slack / email sinks)
+jms alert 192.168.30.13 tcp:80 http:443/ \
+  --webhook https://hooks.example.com/alerts --interval 30
+
+# Unattended daemon mode with human-friendly interval
+jms daemon 192.168.30.13 --interval 5m --checks tcp:22 --checks https:443/
+
+# Diff current scan against previous stored run
+jms diff 192.168.30.13 --history --kind scan
 ```
 
 ---
 
 ## Output / Reporting
 
-Most commands support `-o FILE` to save results as JSON:
+Most commands accept `-o FILE` to write JSON. `scan`, `health`, `vuln`, and `netmap`
+also support uniform structured output:
 
 ```bash
 jms scan 192.168.30.0/24 -o results.json
+jms scan 192.168.30.0/24 --json
+jms health 10.0.0.1 tcp:22 --csv
 jms harvest 192.168.30.1 192.168.30.13 -u admin -o hosts.json
 jms sysinfo 192.168.30.13 -u amer -o sysinfo.json
 ```
+
+Scan / vuln / netmap runs are also recorded in `~/.porthole/history.db` for
+`jms diff --history`.
+
+Fleet execution (`--hosts-file` / `--parallel N`) is available on `health`,
+`scan`, `spray`, `netmap`, and `procs ps`.
 
 ---
 
@@ -154,6 +187,22 @@ Python dependencies (installed automatically):
 - `rich` — terminal output
 - `click` — CLI
 - `scp` — file transfer
+- `PyYAML` — profiles
+- `keyring` — credential vault
+
+---
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest
+ruff check .
+ruff format --check .
+```
+
+CI runs lint, pytest with a 70% coverage floor across Python 3.9/3.11/3.12, and a
+wheel smoke test (`jms --help` / `jms --version`).
 
 ---
 

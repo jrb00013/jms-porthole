@@ -9,6 +9,7 @@ caller fall back to storing a password in plaintext in
 ~/.config/jms/hosts.json — and that fallback is expected to warn the user
 loudly (see config.py) rather than happen silently.
 """
+
 from rich.console import Console
 
 console = Console()
@@ -16,6 +17,7 @@ console = Console()
 try:
     import keyring as _keyring
     from keyring.errors import KeyringError, NoKeyringError
+
     HAS_KEYRING = True
 except ImportError:
     _keyring = None
@@ -40,7 +42,9 @@ def is_available() -> bool:
 def store_password(alias: str, username: str, password: str) -> bool:
     """Store a password in the OS keyring. Returns True on success."""
     if not is_available():
-        console.print("[yellow]No usable OS keyring backend — password will fall back to plain config[/yellow]")
+        console.print(
+            "[yellow]No usable OS keyring backend — password will fall back to plain config[/yellow]"
+        )
         return False
     try:
         _keyring.set_password(SERVICE, f"{alias}:{username}", password)

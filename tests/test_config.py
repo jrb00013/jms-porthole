@@ -1,4 +1,5 @@
 """Unit tests for porthole.config — host aliases, keyring-first credential storage."""
+
 from unittest.mock import patch
 
 from porthole import config

@@ -1,29 +1,31 @@
 """
 Service probing — banner grabbing and fingerprinting for common ports.
 """
+
+import re
 import socket
 import ssl
-import re
+
 from rich.console import Console
 from rich.table import Table
 
 console = Console()
 
 SERVICE_PROBES = {
-    22:   ("SSH",        b""),
-    21:   ("FTP",        b""),
-    25:   ("SMTP",       b"EHLO jms\r\n"),
-    80:   ("HTTP",       b"HEAD / HTTP/1.0\r\nHost: target\r\n\r\n"),
-    110:  ("POP3",       b""),
-    143:  ("IMAP",       b""),
-    443:  ("HTTPS",      b"HEAD / HTTP/1.0\r\nHost: target\r\n\r\n"),
-    3306: ("MySQL",      b""),
+    22: ("SSH", b""),
+    21: ("FTP", b""),
+    25: ("SMTP", b"EHLO jms\r\n"),
+    80: ("HTTP", b"HEAD / HTTP/1.0\r\nHost: target\r\n\r\n"),
+    110: ("POP3", b""),
+    143: ("IMAP", b""),
+    443: ("HTTPS", b"HEAD / HTTP/1.0\r\nHost: target\r\n\r\n"),
+    3306: ("MySQL", b""),
     5432: ("PostgreSQL", b""),
-    6379: ("Redis",      b"PING\r\n"),
-    27017:("MongoDB",    b""),
-    5900: ("VNC",        b""),
-    5901: ("VNC",        b""),
-    3389: ("RDP",        b""),
+    6379: ("Redis", b"PING\r\n"),
+    27017: ("MongoDB", b""),
+    5900: ("VNC", b""),
+    5901: ("VNC", b""),
+    3389: ("RDP", b""),
 }
 
 VERSION_PATTERNS = [

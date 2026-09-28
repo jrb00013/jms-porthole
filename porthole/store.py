@@ -6,6 +6,7 @@ This backs diff.py's `--history` mode: instead of only comparing two files
 given at invocation time, a command can diff its current results against
 the last stored run of the same kind for the same host/target.
 """
+
 import json
 import sqlite3
 from datetime import datetime, timezone

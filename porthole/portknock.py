@@ -1,8 +1,10 @@
 """
 Port knocking — send a sequence of connection attempts to trigger firewall rules.
 """
+
 import socket
 import time
+
 from rich.console import Console
 
 console = Console()
@@ -28,4 +30,4 @@ def knock(host: str, ports: list[int], protocol: str = "tcp", delay: float = 0.1
             console.print(f"  [dim]→ {port}/{protocol}[/dim]")
         time.sleep(delay)
 
-    console.print(f"[green]Knock sequence sent.[/green]")
+    console.print("[green]Knock sequence sent.[/green]")

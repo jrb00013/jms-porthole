@@ -1,6 +1,7 @@
 """Unit tests for porthole.scanner — no real network access."""
+
 import socket
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -65,8 +66,10 @@ def test_scan_ports_uses_default_common_ports_and_reports_open():
     def fake_check(host, port, timeout=0.5):
         return port in (22, 80)
 
-    with patch.object(scanner, "check_port", side_effect=fake_check), \
-         patch.object(scanner, "grab_banner", return_value=""):
+    with (
+        patch.object(scanner, "check_port", side_effect=fake_check),
+        patch.object(scanner, "grab_banner", return_value=""),
+    ):
         result = scanner.scan_ports("10.0.0.1", ports=[22, 80, 443])
 
     assert set(result.keys()) == {22, 80}
@@ -80,7 +83,11 @@ def test_scan_network_rejects_bad_cidr():
 
 
 def test_scan_network_returns_sorted_live_hosts():
-    with patch.object(scanner, "ping_host", side_effect=lambda h, timeout=1.0: h.endswith(".2") or h.endswith(".5")):
+    with patch.object(
+        scanner,
+        "ping_host",
+        side_effect=lambda h, timeout=1.0: h.endswith(".2") or h.endswith(".5"),
+    ):
         live = scanner.scan_network("192.168.50.0/29")
     assert live == sorted(live)
     for h in live:
